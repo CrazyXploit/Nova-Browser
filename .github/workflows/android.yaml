@@ -7,9 +7,19 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_HOME: /usr/local/lib/android/sdk
+
     steps:
       - uses: actions/checkout@v4
 
@@ -19,41 +29,40 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
 
-      - name: Grant execute permission
+      - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      - name: Decode keystore
+      - name: Decode keystore (tag builds only)
         if: startsWith(github.ref, 'refs/tags/')
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
 
-      - name: Build release (tag only)
+      - name: Build release APK + AAB (tag builds only)
         if: startsWith(github.ref, 'refs/tags/')
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease bundleRelease --stacktrace
+        run: ./gradlew assembleRelease bundleRelease --stacktrace --no-daemon
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: nova-browser-debug
           path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
 
       - name: Upload release artifacts
         if: startsWith(github.ref, 'refs/tags/')
@@ -63,15 +72,19 @@ jobs:
           path: |
             app/build/outputs/apk/release/*.apk
             app/build/outputs/bundle/release/*.aab
+          retention-days: 30
 
   release:
     needs: build
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
-    permissions: { contents: write }
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
-        with: { path: artifacts }
+        with:
+          path: artifacts
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
+          generate_release_notes: true
