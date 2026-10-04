@@ -1,13 +1,7 @@
 package com.nova.browser.ui.browser
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -119,7 +113,7 @@ fun UrlBar(
                     .weight(1f)
                     .height(48.dp)
                     .shadow(
-                        elevation = (12 * glowAlpha).dp,
+                        elevation = (12f * glowAlpha).dp,
                         shape = RoundedCornerShape(24.dp),
                         ambientColor = MaterialTheme.colorScheme.primary,
                         spotColor = MaterialTheme.colorScheme.primary,
@@ -127,7 +121,7 @@ fun UrlBar(
                     .clip(RoundedCornerShape(24.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .border(
-                        width = (1.5 * glowAlpha).dp,
+                        width = (1.5f * glowAlpha).dp,
                         brush = Brush.linearGradient(
                             listOf(
                                 MaterialTheme.colorScheme.primary,
@@ -143,7 +137,7 @@ fun UrlBar(
                         Modifier
                             .fillMaxHeight()
                             .width(60.dp)
-                            .offset(x = (shine * 320).dp)
+                            .offset(x = (shine * 320f).dp)
                             .background(
                                 Brush.horizontalGradient(
                                     listOf(
