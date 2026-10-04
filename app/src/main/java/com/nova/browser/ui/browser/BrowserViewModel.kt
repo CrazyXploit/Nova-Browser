@@ -8,7 +8,11 @@ import com.nova.browser.data.TabDao
 import com.nova.browser.data.TabEntity
 import com.nova.browser.util.UrlUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -88,19 +92,21 @@ class BrowserViewModel @Inject constructor(
 
     // ☕ Uses Java util for URL normalization
     val navigate: (String) -> Unit = { input ->
-        val id = _state.value.activeTabId ?: return@navigate
-        viewModelScope.launch {
-            val normalized = UrlUtils.normalize(input)
-            tabDao.upsert(
-                TabEntity(
-                    id = id,
-                    url = normalized,
-                    title = UrlUtils.displayHost(normalized),
-                    faviconUrl = null,
-                    lastActive = System.currentTimeMillis(),
+        val id = _state.value.activeTabId
+        if (id != null) {
+            viewModelScope.launch {
+                val normalized = UrlUtils.normalize(input)
+                tabDao.upsert(
+                    TabEntity(
+                        id = id,
+                        url = normalized,
+                        title = UrlUtils.displayHost(normalized),
+                        faviconUrl = null,
+                        lastActive = System.currentTimeMillis(),
+                    )
                 )
-            )
-            _state.update { it.copy(urlInput = normalized, isLoading = true, progress = 0) }
+                _state.update { it.copy(urlInput = normalized, isLoading = true, progress = 0) }
+            }
         }
     }
 
@@ -110,18 +116,20 @@ class BrowserViewModel @Inject constructor(
 
     val onPageFinished: (String, String, String?) -> Unit = { url, title, favicon ->
         viewModelScope.launch {
-            val id = _state.value.activeTabId ?: return@launch
-            tabDao.upsert(
-                TabEntity(
-                    id = id,
-                    url = url,
-                    title = title.ifBlank { UrlUtils.displayHost(url) },
-                    faviconUrl = favicon,
-                    lastActive = System.currentTimeMillis(),
+            val id = _state.value.activeTabId
+            if (id != null) {
+                tabDao.upsert(
+                    TabEntity(
+                        id = id,
+                        url = url,
+                        title = title.ifBlank { UrlUtils.displayHost(url) },
+                        faviconUrl = favicon,
+                        lastActive = System.currentTimeMillis(),
+                    )
                 )
-            )
-            historyDao.insert(HistoryEntity(url = url, title = title))
-            _state.update { it.copy(isLoading = false, progress = 100, urlInput = url) }
+                historyDao.insert(HistoryEntity(url = url, title = title))
+                _state.update { it.copy(isLoading = false, progress = 100, urlInput = url) }
+            }
         }
     }
 
