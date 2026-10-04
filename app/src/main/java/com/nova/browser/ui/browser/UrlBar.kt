@@ -1,25 +1,61 @@
 package com.nova.browser.ui.browser
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Tab
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.*
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -44,12 +80,12 @@ fun UrlBar(
     val focused by interaction.collectIsFocusedAsState()
     val focus = LocalFocusManager.current
 
-    // Animated glow border
     val glowAlpha by animateFloatAsState(
         targetValue = if (focused) 1f else 0f,
         animationSpec = tween(250),
         label = "glow",
     )
+
     val infiniteTransition = rememberInfiniteTransition(label = "shine")
     val shine by infiniteTransition.animateFloat(
         initialValue = -1f,
@@ -58,20 +94,26 @@ fun UrlBar(
         label = "shine",
     )
 
-    Column(modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
-
-        // ── Row: back · URL · tabs ──────────────────────────
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Start,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
+                Icon(
+                    Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
             }
 
-            // Fancy glow URL pill
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -96,7 +138,6 @@ fun UrlBar(
                     ),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                // moving shine overlay
                 if (focused) {
                     Box(
                         Modifier
@@ -105,11 +146,16 @@ fun UrlBar(
                             .offset(x = (shine * 320).dp)
                             .background(
                                 Brush.horizontalGradient(
-                                    listOf(Color.Transparent, Color.White.copy(alpha = 0.15f), Color.Transparent)
+                                    listOf(
+                                        Color.Transparent,
+                                        Color.White.copy(alpha = 0.15f),
+                                        Color.Transparent,
+                                    )
                                 )
                             )
                     )
                 }
+
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -119,13 +165,16 @@ fun UrlBar(
                         contentDescription = null,
                         modifier = Modifier.size(15.dp),
                         tint = if (url.startsWith("https"))
-                            Color(0xFF34D399) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            Color(0xFF34D399)
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.width(8.dp))
+
                     Box(Modifier.weight(1f)) {
                         if (url.isBlank()) {
                             Text(
-                                "Search or type URL",
+                                text = "Search or type URL",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 14.sp,
                             )
@@ -145,25 +194,31 @@ fun UrlBar(
                                 imeAction = ImeAction.Go,
                             ),
                             keyboardActions = KeyboardActions(
-                                onGo = { onNavigate(url); focus.clearFocus() },
+                                onGo = {
+                                    onNavigate(url)
+                                    focus.clearFocus()
+                                },
                             ),
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    AnimatedVisibility(
-                        visible = loading,
-                        enter = scaleIn() + fadeIn(),
-                        exit = scaleOut() + fadeOut(),
-                    ) {
+
+                    if (loading) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                    }
-                    if (!loading) {
-                        IconButton(onClick = onReload, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Refresh, "Reload", modifier = Modifier.size(18.dp))
+                    } else {
+                        IconButton(
+                            onClick = onReload,
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Reload",
+                                modifier = Modifier.size(18.dp),
+                            )
                         }
                     }
                 }
@@ -171,17 +226,23 @@ fun UrlBar(
 
             Spacer(Modifier.width(4.dp))
 
-            // Home button
             IconButton(onClick = onHome) {
-                Icon(Icons.Default.Home, "Home", tint = MaterialTheme.colorScheme.onSurface)
+                Icon(
+                    Icons.Default.Home,
+                    contentDescription = "Home",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
             }
 
-            // Tabs button — animated badge
             Box {
                 IconButton(onClick = onTabsClick) {
-                    Icon(Icons.Default.Tab, "Tabs", tint = MaterialTheme.colorScheme.onSurface)
+                    Icon(
+                        Icons.Default.Tab,
+                        contentDescription = "Tabs",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
                 }
-                AnimatedVisibility(visible = tabCount > 0) {
+                if (tabCount > 0) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -192,7 +253,7 @@ fun UrlBar(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            tabCount.toString(),
+                            text = tabCount.toString(),
                             color = MaterialTheme.colorScheme.onPrimary,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -202,21 +263,18 @@ fun UrlBar(
             }
         }
 
-        // ── Progress bar (animated gradient) ────────────────
-        AnimatedVisibility(
-            visible = progress in 1..99,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut(),
-        ) {
+        if (progress in 1..99) {
             Box(
-                Modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .height(2.dp)
                     .background(Color.Transparent)
             ) {
                 LinearProgressIndicator(
                     progress = { progress / 100f },
-                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp),
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = Color.Transparent,
                 )
