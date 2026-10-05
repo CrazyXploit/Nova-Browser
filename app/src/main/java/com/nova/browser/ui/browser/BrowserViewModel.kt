@@ -13,6 +13,7 @@ import com.nova.browser.data.HistoryDao
 import com.nova.browser.data.HistoryEntity
 import com.nova.browser.data.TabDao
 import com.nova.browser.data.TabEntity
+import com.nova.browser.data.UserAgentManager
 import com.nova.browser.util.UrlUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,11 +38,17 @@ data class BrowserUiState(
     val showTabSwitcher: Boolean = false,
     val showSearchOverlay: Boolean = false,
     val showMoreTools: Boolean = false,
+    val showOverlayMenu: Boolean = false,
+    val showSiteInfo: Boolean = false,
+    val showIpOverlay: Boolean = false,
+    val showUserAgentPicker: Boolean = false,
     val isIncognito: Boolean = false,
     val adBlockEnabled: Boolean = true,
     val erudaEnabled: Boolean = true,
     val erudaReady: Boolean = false,
+    val desktopMode: Boolean = false,
     val isCurrentUrlBookmarked: Boolean = false,
+    val myIp: String = "",
 ) {
     val activeTab: TabEntity? get() = tabs.firstOrNull { it.id == activeTabId }
 }
@@ -71,10 +78,8 @@ class BrowserViewModel @Inject constructor(
         AdBlocker.enabled = true
         ErudaManager.enabled = true
 
-        // === Eruda one-time download ===
         viewModelScope.launch {
-            val ctx = getApplication<Application>()
-            val ok = ErudaManager.ensureDownloaded(ctx)
+            val ok = ErudaManager.ensureDownloaded(getApplication())
             _state.update { it.copy(erudaReady = ok) }
         }
 
@@ -96,10 +101,8 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
-    // ── Tab actions ────────────────────────────────────────
-    val newTab: (String) -> Unit = { url ->
-        viewModelScope.launch { createTab(url) }
-    }
+    // ── Tabs ───────────────────────────────────────────────
+    val newTab: (String) -> Unit = { url -> viewModelScope.launch { createTab(url) } }
 
     val closeTab: (String) -> Unit = { id ->
         viewModelScope.launch {
@@ -108,10 +111,7 @@ class BrowserViewModel @Inject constructor(
             if (_state.value.activeTabId == id) {
                 val next = remaining.firstOrNull()
                 _state.update {
-                    it.copy(
-                        activeTabId = next?.id,
-                        urlInput = next?.url.orEmpty(),
-                    )
+                    it.copy(activeTabId = next?.id, urlInput = next?.url.orEmpty())
                 }
             }
         }
@@ -137,9 +137,7 @@ class BrowserViewModel @Inject constructor(
     }
 
     val openSearchOverlay: () -> Unit = {
-        _state.update {
-            it.copy(showSearchOverlay = true, urlInput = "")
-        }
+        _state.update { it.copy(showSearchOverlay = true, urlInput = "") }
     }
 
     val closeSearchOverlay: () -> Unit = {
@@ -148,6 +146,39 @@ class BrowserViewModel @Inject constructor(
 
     val toggleMoreTools: () -> Unit = {
         _state.update { it.copy(showMoreTools = !it.showMoreTools) }
+    }
+
+    val toggleOverlayMenu: () -> Unit = {
+        _state.update { it.copy(showOverlayMenu = !it.showOverlayMenu) }
+    }
+
+    val closeOverlayMenu: () -> Unit = {
+        _state.update { it.copy(showOverlayMenu = false) }
+    }
+
+    val toggleSiteInfo: () -> Unit = {
+        _state.update { it.copy(showSiteInfo = !it.showSiteInfo) }
+    }
+
+    val closeSiteInfo: () -> Unit = {
+        _state.update { it.copy(showSiteInfo = false) }
+    }
+
+    val openIpOverlay: () -> Unit = {
+        _state.update { it.copy(showIpOverlay = true) }
+        fetchMyIp()
+    }
+
+    val closeIpOverlay: () -> Unit = {
+        _state.update { it.copy(showIpOverlay = false) }
+    }
+
+    val openUserAgentPicker: () -> Unit = {
+        _state.update { it.copy(showUserAgentPicker = true) }
+    }
+
+    val closeUserAgentPicker: () -> Unit = {
+        _state.update { it.copy(showUserAgentPicker = false) }
     }
 
     val toggleAdBlock: () -> Unit = {
@@ -168,19 +199,42 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
-    val goHome: () -> Unit = {
-        navigate(HOME_URL)
+    val toggleDesktopMode: () -> Unit = {
+        val new = !_state.value.desktopMode
+        UserAgentManager.mode = if (new)
+            UserAgentManager.Mode.DESKTOP
+        else
+            UserAgentManager.Mode.MOBILE
+        _state.update { it.copy(desktopMode = new) }
+        // Reload current page
+        val url = _state.value.activeTab?.url
+        if (!url.isNullOrBlank()) navigate(url)
     }
+
+    val setUserAgent: (String) -> Unit = { ua ->
+        UserAgentManager.mode = when (ua) {
+            "mobile" -> UserAgentManager.Mode.MOBILE
+            "desktop" -> UserAgentManager.Mode.DESKTOP
+            else -> {
+                UserAgentManager.customUa = ua
+                UserAgentManager.Mode.CUSTOM
+            }
+        }
+        _state.update { it.copy(showUserAgentPicker = false) }
+        val url = _state.value.activeTab?.url
+        if (!url.isNullOrBlank()) navigate(url)
+    }
+
+    val goHome: () -> Unit = { navigate(HOME_URL) }
 
     val redownloadEruda: () -> Unit = {
         viewModelScope.launch {
-            val ctx = getApplication<Application>()
-            val ok = ErudaManager.forceRedownload(ctx)
+            val ok = ErudaManager.forceRedownload(getApplication())
             _state.update { it.copy(erudaReady = ok) }
         }
     }
 
-    // ── URL input ──────────────────────────────────────────
+    // ── Navigation ─────────────────────────────────────────
     val onUrlInputChange: (String) -> Unit = { input ->
         _state.update { it.copy(urlInput = input) }
     }
@@ -213,16 +267,12 @@ class BrowserViewModel @Inject constructor(
 
     // ── Page events ────────────────────────────────────────
     val onPageStarted: () -> Unit = {
-        if (!_state.value.isLoading) {
-            _state.update { it.copy(isLoading = true) }
-        }
+        if (!_state.value.isLoading) _state.update { it.copy(isLoading = true) }
     }
 
     val onProgress: (Int) -> Unit = { p ->
         val current = _state.value.progress
-        val currentBucket = current / 10
-        val newBucket = p / 10
-        if (currentBucket != newBucket || p == 100) {
+        if (current / 10 != p / 10 || p == 100) {
             _state.update { it.copy(progress = p) }
         }
     }
@@ -293,7 +343,6 @@ class BrowserViewModel @Inject constructor(
         viewModelScope.launch { bookmarkDao.delete(id) }
     }
 
-    // ── History ────────────────────────────────────────────
     val clearHistory: () -> Unit = {
         viewModelScope.launch { historyDao.clear() }
     }
@@ -302,25 +351,17 @@ class BrowserViewModel @Inject constructor(
     val onDownloadStart: (String, String?, String?, String?, Long) -> Unit =
         { url, userAgent, contentDisposition, mimeType, contentLength ->
             viewModelScope.launch {
-                val fileName = android.webkit.URLUtil.guessFileName(
-                    url, contentDisposition, mimeType
-                )
+                val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
                 downloadDao.insert(
                     DownloadEntity(
-                        url = url,
-                        fileName = fileName,
-                        mimeType = mimeType,
-                        contentLength = contentLength,
-                        status = "QUEUED",
+                        url = url, fileName = fileName, mimeType = mimeType,
+                        contentLength = contentLength, status = "QUEUED",
                     )
                 )
-                val ctx = getApplication<Application>()
                 com.nova.browser.data.DownloadManagerHelper.enqueue(
-                    context = ctx,
-                    url = url,
-                    userAgent = userAgent,
-                    contentDisposition = contentDisposition,
-                    mimeType = mimeType,
+                    context = getApplication(),
+                    url = url, userAgent = userAgent,
+                    contentDisposition = contentDisposition, mimeType = mimeType,
                 )
             }
         }
@@ -329,24 +370,35 @@ class BrowserViewModel @Inject constructor(
         viewModelScope.launch { downloadDao.delete(id) }
     }
 
+    // ── My IP ──────────────────────────────────────────────
+    private fun fetchMyIp() {
+        viewModelScope.launch {
+            _state.update { it.copy(myIp = "Loading…") }
+            try {
+                val url = java.net.URL("https://api.ipify.org")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 8000
+                conn.readTimeout = 8000
+                val ip = conn.inputStream.bufferedReader().use { it.readText() }
+                conn.disconnect()
+                _state.update { it.copy(myIp = ip.trim()) }
+            } catch (e: Exception) {
+                _state.update { it.copy(myIp = "Failed to fetch IP") }
+            }
+        }
+    }
+
     private suspend fun createTab(url: String) {
         val id = UUID.randomUUID().toString()
         tabDao.upsert(
             TabEntity(
-                id = id,
-                url = url,
-                title = "New Tab",
-                faviconUrl = null,
-                lastActive = System.currentTimeMillis(),
+                id = id, url = url, title = "New Tab",
+                faviconUrl = null, lastActive = System.currentTimeMillis(),
                 isIncognito = _state.value.isIncognito,
             )
         )
         _state.update {
-            it.copy(
-                activeTabId = id,
-                urlInput = url,
-                showSearchOverlay = false,
-            )
+            it.copy(activeTabId = id, urlInput = url, showSearchOverlay = false)
         }
     }
 }
