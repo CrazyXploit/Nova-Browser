@@ -3,6 +3,8 @@ package com.nova.browser.ui.browser
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.os.Build
+import android.util.Log
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.DownloadListener
 import android.webkit.WebChromeClient
@@ -21,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.nova.browser.data.AdBlocker
 import com.nova.browser.data.ErudaInjector
+
+private const val TAG = "NovaWebView"
 
 class WebViewHolder {
     var webView: WebView? = null
@@ -48,33 +52,42 @@ fun WebViewContainer(
         factory = { ctx ->
             WebView(ctx).apply {
                 setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
-                isVerticalScrollBarEnabled = true
+                isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
+                overScrollMode = WebView.OVER_SCROLL_NEVER
 
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
                     databaseEnabled = true
                     loadsImagesAutomatically = true
-                    setSupportZoom(true)
-                    builtInZoomControls = true
+                    setSupportZoom(false)
+                    builtInZoomControls = false
                     displayZoomControls = false
-                    mediaPlaybackRequiresUserGesture = false
+                    mediaPlaybackRequiresUserGesture = true
                     useWideViewPort = true
                     loadWithOverviewMode = true
 
-                    cacheMode = WebSettings.LOAD_DEFAULT
-                    allowFileAccess = false
+                    // === LOW-END PERF: cache everything ===
+                    cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                    allowFileAccess = true                    // needed for file:///android_asset/
                     allowContentAccess = false
+                    blockNetworkImage = false
+                    blockNetworkLoads = false
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        safeBrowsingEnabled = true
+                        safeBrowsingEnabled = false               // save RAM
                     }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         forceDark = WebSettings.FORCE_DARK_AUTO
                     }
 
                     mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+
+                    // === LOW-END PERF: aggressive rendering ===
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        offscreenPreRaster = false
+                    }
                 }
 
                 if (isIncognito) {
@@ -100,13 +113,22 @@ fun WebViewContainer(
                         favicon: Bitmap?,
                     ) {
                         currentOnPageStarted()
-                        // Inject Eruda EARLY — before the page's own JS runs
                         if (ErudaInjector.enabled && view != null) {
-                            view.evaluateJavascript(ErudaInjector.buildInitScript(), null)
+                            view.evaluateJavascript(
+                                ErudaInjector.buildInitScript(),
+                                null,
+                            )
                         }
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
+                        if (ErudaInjector.enabled && view != null) {
+                            view.evaluateJavascript(
+                                ErudaInjector.buildInitScript(),
+                                null,
+                            )
+                        }
+
                         val faviconUrl = url?.let { pageUrl ->
                             try {
                                 val uri = java.net.URI(pageUrl)
@@ -130,11 +152,10 @@ fun WebViewContainer(
                     }
 
                     override fun onConsoleMessage(
-                        consoleMessage: android.webkit.ConsoleMessage?,
+                        consoleMessage: ConsoleMessage?,
                     ): Boolean {
-                        // Forward JS console to Android logcat for debugging
-                        android.util.Log.d(
-                            "NovaConsole",
+                        Log.d(
+                            TAG,
                             "[${consoleMessage?.messageLevel()}] ${consoleMessage?.message()}",
                         )
                         return true
