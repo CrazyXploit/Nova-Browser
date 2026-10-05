@@ -63,11 +63,10 @@ fun UrlBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(horizontal = 4.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Shield icon — tap for site info
-            IconButton(onClick = onShieldClick, modifier = Modifier.size(38.dp)) {
+            IconButton(onClick = onShieldClick, modifier = Modifier.size(40.dp)) {
                 Icon(
                     imageVector = if (isSecure) Icons.Default.Shield else Icons.Default.Security,
                     contentDescription = "Site info",
@@ -80,8 +79,8 @@ fun UrlBar(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(42.dp)
-                    .clip(RoundedCornerShape(21.dp))
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(20.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable { onBarClick() }
                     .padding(horizontal = 12.dp),
@@ -91,10 +90,10 @@ fun UrlBar(
                     Icon(
                         imageVector = Icons.Default.Language,
                         contentDescription = null,
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier.size(13.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = url.ifBlank { "Search Google or type URL" },
                         color = if (url.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
@@ -106,7 +105,7 @@ fun UrlBar(
                     )
                     if (loading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(13.dp),
                             strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -116,7 +115,7 @@ fun UrlBar(
 
             Spacer(Modifier.width(2.dp))
 
-            IconButton(onClick = onBookmarkClick, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = onBookmarkClick, modifier = Modifier.size(38.dp)) {
                 Icon(
                     imageVector = if (isBookmarked) Icons.Default.Bookmark
                     else Icons.Default.BookmarkBorder,
@@ -128,7 +127,7 @@ fun UrlBar(
             }
 
             Box {
-                IconButton(onClick = onTabsClick, modifier = Modifier.size(36.dp)) {
+                IconButton(onClick = onTabsClick, modifier = Modifier.size(38.dp)) {
                     Icon(
                         Icons.Default.Language, "Tabs",
                         tint = MaterialTheme.colorScheme.onSurface,
@@ -155,7 +154,7 @@ fun UrlBar(
                 }
             }
 
-            IconButton(onClick = onMoreClick, modifier = Modifier.size(36.dp)) {
+            IconButton(onClick = onMoreClick, modifier = Modifier.size(38.dp)) {
                 Icon(
                     Icons.Default.MoreVert, "More",
                     tint = MaterialTheme.colorScheme.onSurface,
