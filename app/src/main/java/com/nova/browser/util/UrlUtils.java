@@ -6,9 +6,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 
 /**
- * Java utility for URL normalization — interop demo with Kotlin code.
- * Called from BrowserViewModel via UrlUtils.normalize(input).
- * Uses Google as the default search engine.
+ * URL normalization. Uses SearchEngineManager for search queries.
  */
 public final class UrlUtils {
 
@@ -26,14 +24,8 @@ public final class UrlUtils {
             return "https://" + trimmed;
         }
 
-        String q;
-        try {
-            // String overload — works on ALL Android versions
-            q = URLEncoder.encode(trimmed, "UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            q = trimmed;
-        }
-        return "https://www.google.com/search?q=" + q;
+        // Delegate search to the manager (handles current engine)
+        return com.nova.browser.data.SearchEngineManager.INSTANCE.buildSearchUrl(trimmed);
     }
 
     public static boolean isSecure(@NonNull String url) {
