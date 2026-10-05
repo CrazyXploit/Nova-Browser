@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nova.browser.data.UserAgentManager
 
 private const val HOME_URL = "https://www.google.com"
 
@@ -39,9 +40,11 @@ fun BrowserScreen(
     }
 
     BackHandler(enabled = state.showTabSwitcher) { vm.toggleTabSwitcher() }
+    BackHandler(enabled = state.showOverlayMenu) { vm.closeOverlayMenu() }
+    BackHandler(enabled = state.showSiteInfo) { vm.closeSiteInfo() }
+    BackHandler(enabled = state.showIpOverlay) { vm.closeIpOverlay() }
     BackHandler(
-        enabled = !state.showTabSwitcher &&
-            !state.showSearchOverlay &&
+        enabled = !state.showTabSwitcher && !state.showSearchOverlay &&
             webViewRef.value?.canGoBack() == true
     ) {
         webViewRef.value?.goBack()
@@ -61,7 +64,8 @@ fun BrowserScreen(
                     isBookmarked = state.isCurrentUrlBookmarked,
                     onBarClick = vm.openSearchOverlay,
                     onBookmarkClick = vm.toggleBookmark,
-                    onMoreClick = vm.toggleMoreTools,
+                    onShieldClick = vm.toggleSiteInfo,
+                    onMoreClick = vm.toggleOverlayMenu,
                     onTabsClick = vm.toggleTabSwitcher,
                     tabCount = state.tabs.size,
                 )
@@ -83,7 +87,11 @@ fun BrowserScreen(
                     },
                     onHome = { vm.goHome() },
                     onTabs = vm.toggleTabSwitcher,
-                    onMore = vm.toggleMoreTools,
+                    onMore = vm.toggleOverlayMenu,
+                    onLongPressMore = {
+                        // Long press → open overlay (or same behavior)
+                        vm.toggleOverlayMenu()
+                    },
                 )
             },
         ) { padding ->
@@ -95,6 +103,7 @@ fun BrowserScreen(
                 WebViewContainer(
                     initialUrl = state.activeTab?.url.orEmpty(),
                     isIncognito = state.isIncognito,
+                    desktopMode = state.desktopMode,
                     onPageStarted = vm.onPageStarted,
                     onProgress = vm.onProgress,
                     onPageFinished = vm.onPageFinished,
@@ -113,7 +122,50 @@ fun BrowserScreen(
                 onClearHistory = vm.clearHistory,
             )
         }
+
+        if (state.showSiteInfo) {
+            SiteInfoOverlay(
+                url = state.activeTab?.url.orEmpty(),
+                onDismiss = vm.closeSiteInfo,
+            )
+        }
+
+        if (state.showIpOverlay) {
+            MyIpOverlay(
+                ip = state.myIp,
+                onDismiss = vm.closeIpOverlay,
+            )
+        }
+
+        if (state.showUserAgentPicker) {
+            UserAgentPicker(
+                current = UserAgentManager.mode,
+                onPick = vm.setUserAgent,
+                onDismiss = vm.closeUserAgentPicker,
+            )
+        }
     }
+
+    OverlayMenu(
+        visible = state.showOverlayMenu,
+        adBlockEnabled = state.adBlockEnabled,
+        erudaEnabled = state.erudaEnabled,
+        desktopMode = state.desktopMode,
+        isIncognito = state.isIncognito,
+        onToggleAdBlock = vm.toggleAdBlock,
+        onToggleEruda = vm.toggleEruda,
+        onToggleDesktop = vm.toggleDesktopMode,
+        onToggleIncognito = vm.toggleIncognito,
+        onUserAgent = {
+            vm.closeOverlayMenu()
+            vm.openUserAgentPicker()
+        },
+        onMyIp = {
+            vm.closeOverlayMenu()
+            vm.openIpOverlay()
+        },
+        onDismiss = vm.closeOverlayMenu,
+    )
 
     if (state.showTabSwitcher) {
         TabSwitcherSheet(
@@ -123,28 +175,6 @@ fun BrowserScreen(
             onClose = vm.closeTab,
             onNew = { vm.newTab(HOME_URL) },
             onDismiss = vm.toggleTabSwitcher,
-        )
-    }
-
-    if (state.showMoreTools) {
-        MoreToolsSheet(
-            adBlockEnabled = state.adBlockEnabled,
-            erudaEnabled = state.erudaEnabled,
-            erudaReady = state.erudaReady,
-            isIncognito = state.isIncognito,
-            onToggleAdBlock = vm.toggleAdBlock,
-            onToggleEruda = vm.toggleEruda,
-            onToggleIncognito = vm.toggleIncognito,
-            onRedownloadEruda = vm.redownloadEruda,
-            onBookmarks = {
-                vm.toggleMoreTools()
-                onOpenBookmarks()
-            },
-            onDownloads = {
-                vm.toggleMoreTools()
-                onOpenDownloads()
-            },
-            onDismiss = vm.toggleMoreTools,
         )
     }
 }
