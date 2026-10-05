@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun MyIpOverlay(
     ip: String,
+    loading: Boolean,
     onDismiss: () -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -79,14 +81,30 @@ fun MyIpOverlay(
                     .clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(16.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = ip.ifBlank { "Fetching…" },
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                )
+                if (loading) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "Fetching…",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp,
+                        )
+                    }
+                } else {
+                    Text(
+                        text = ip.ifBlank { "Unable to fetch IP" },
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
 
             Spacer(Modifier.height(12.dp))
@@ -95,8 +113,13 @@ fun MyIpOverlay(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .clickable {
+                    .background(
+                        if (loading || ip.isBlank() || ip.startsWith("Unable"))
+                            MaterialTheme.colorScheme.surfaceVariant
+                        else
+                            MaterialTheme.colorScheme.primary
+                    )
+                    .clickable(enabled = !loading && ip.isNotBlank() && !ip.startsWith("Unable")) {
                         val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         cm.setPrimaryClip(ClipData.newPlainText("IP", ip))
                         Toast.makeText(ctx, "IP copied", Toast.LENGTH_SHORT).show()
