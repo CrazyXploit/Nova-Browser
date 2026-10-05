@@ -16,10 +16,16 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    @Provides @Singleton
+    @Provides
+    @Singleton
     fun provideDb(@ApplicationContext ctx: Context): NovaDatabase =
-        Room.databaseBuilder(ctx, NovaDatabase::class.java, "nova.db").build()
+        Room.databaseBuilder(ctx, NovaDatabase::class.java, "nova.db")
+            .fallbackToDestructiveMigration()
+            .build()
 
-    @Provides fun provideTabDao(db: NovaDatabase): TabDao = db.tabDao()
-    @Provides fun provideHistoryDao(db: NovaDatabase): HistoryDao = db.historyDao()
+    @Provides
+    fun provideTabDao(db: NovaDatabase): TabDao = db.tabDao()
+
+    @Provides
+    fun provideHistoryDao(db: NovaDatabase): HistoryDao = db.historyDao()
 }
