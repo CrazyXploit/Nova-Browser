@@ -70,6 +70,7 @@ fun OverlayMenu(
     onMyIp: () -> Unit,
     onImageQuality: () -> Unit,
     onFind: () -> Unit,
+    onSearchEngine: () -> Unit,
     onHistory: () -> Unit,
     onBookmarks: () -> Unit,
     onDownloads: () -> Unit,
@@ -99,10 +100,10 @@ fun OverlayMenu(
                         end = 16.dp,
                     )
                     .width(menuWidth)
-                    .heightIn(max = 580.dp)
+                    .heightIn(max = 620.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(MaterialTheme.colorScheme.surface)
-                    .clickable { /* consume */ }
+                    .clickable { }
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 12.dp),
             ) {
@@ -128,6 +129,7 @@ fun OverlayMenu(
                     "$imageQualityLabel${if (dataSaver) " · Data Saver" else ""}",
                     onImageQuality,
                 )
+                ActionItem(Icons.Default.Search, "Search Engine", null, onSearchEngine)
                 ActionItem(Icons.Default.Search, "Find in page", null, onFind)
                 ActionItem(Icons.Default.History, "History", null, onHistory)
                 ActionItem(Icons.Default.Bookmark, "Bookmarks", null, onBookmarks)
