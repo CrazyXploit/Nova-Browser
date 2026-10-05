@@ -5,7 +5,7 @@ import java.io.ByteArrayInputStream
 
 object AdBlocker {
 
-    private val blockedHosts = setOf(
+    private val blockedHosts = hashSetOf(
         "doubleclick.net",
         "googlesyndication.com",
         "googleadservices.com",
@@ -48,7 +48,7 @@ object AdBlocker {
         "adjust.com",
     )
 
-    private val blockedKeywords = setOf(
+    private val blockedKeywords = arrayOf(
         "/ads/",
         "/ad/",
         "/adserver/",
@@ -62,19 +62,22 @@ object AdBlocker {
         "/beacon/",
     )
 
-    private val emptyResponse: WebResourceResponse
-        get() = WebResourceResponse(
+    private val emptyResponse: WebResourceResponse by lazy {
+        WebResourceResponse(
             "text/plain",
             "utf-8",
             ByteArrayInputStream(ByteArray(0)),
         )
+    }
 
+    @Volatile
     var enabled: Boolean = true
 
     fun shouldBlock(url: String?): Boolean {
         if (!enabled || url.isNullOrEmpty()) return false
-        val lower = url.lowercase()
 
+        // Fast path: check host in set
+        val lower = url.lowercase()
         for (host in blockedHosts) {
             if (lower.contains(host)) return true
         }
