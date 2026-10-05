@@ -8,9 +8,11 @@ import com.nova.browser.data.BookmarkDao
 import com.nova.browser.data.BookmarkEntity
 import com.nova.browser.data.DownloadDao
 import com.nova.browser.data.DownloadEntity
+import com.nova.browser.data.DownloadManagerHelper
 import com.nova.browser.data.ErudaManager
 import com.nova.browser.data.HistoryDao
 import com.nova.browser.data.HistoryEntity
+import com.nova.browser.data.MyIpFetcher
 import com.nova.browser.data.TabDao
 import com.nova.browser.data.TabEntity
 import com.nova.browser.data.UserAgentManager
@@ -37,7 +39,6 @@ data class BrowserUiState(
     val progress: Int = 0,
     val showTabSwitcher: Boolean = false,
     val showSearchOverlay: Boolean = false,
-    val showMoreTools: Boolean = false,
     val showOverlayMenu: Boolean = false,
     val showSiteInfo: Boolean = false,
     val showIpOverlay: Boolean = false,
@@ -47,8 +48,10 @@ data class BrowserUiState(
     val erudaEnabled: Boolean = true,
     val erudaReady: Boolean = false,
     val desktopMode: Boolean = false,
+    val userAgentMode: UserAgentManager.Mode = UserAgentManager.Mode.MOBILE,
     val isCurrentUrlBookmarked: Boolean = false,
     val myIp: String = "",
+    val myIpLoading: Boolean = false,
 ) {
     val activeTab: TabEntity? get() = tabs.firstOrNull { it.id == activeTabId }
 }
@@ -78,8 +81,18 @@ class BrowserViewModel @Inject constructor(
         AdBlocker.enabled = true
         ErudaManager.enabled = true
 
+        // Load UA + Eruda
+        val ctx = getApplication<Application>()
+        UserAgentManager.load(ctx)
+        _state.update {
+            it.copy(
+                userAgentMode = UserAgentManager.mode,
+                desktopMode = UserAgentManager.mode == UserAgentManager.Mode.DESKTOP,
+            )
+        }
+
         viewModelScope.launch {
-            val ok = ErudaManager.ensureDownloaded(getApplication())
+            val ok = ErudaManager.ensureDownloaded(ctx)
             _state.update { it.copy(erudaReady = ok) }
         }
 
@@ -137,15 +150,17 @@ class BrowserViewModel @Inject constructor(
     }
 
     val openSearchOverlay: () -> Unit = {
-        _state.update { it.copy(showSearchOverlay = true, urlInput = "") }
+        // Pre-fill with current URL for editing
+        _state.update {
+            it.copy(
+                showSearchOverlay = true,
+                urlInput = it.activeTab?.url.orEmpty(),
+            )
+        }
     }
 
     val closeSearchOverlay: () -> Unit = {
         _state.update { it.copy(showSearchOverlay = false) }
-    }
-
-    val toggleMoreTools: () -> Unit = {
-        _state.update { it.copy(showMoreTools = !it.showMoreTools) }
     }
 
     val toggleOverlayMenu: () -> Unit = {
@@ -165,7 +180,7 @@ class BrowserViewModel @Inject constructor(
     }
 
     val openIpOverlay: () -> Unit = {
-        _state.update { it.copy(showIpOverlay = true) }
+        _state.update { it.copy(showIpOverlay = true, myIpLoading = true, myIp = "") }
         fetchMyIp()
     }
 
@@ -200,29 +215,42 @@ class BrowserViewModel @Inject constructor(
     }
 
     val toggleDesktopMode: () -> Unit = {
-        val new = !_state.value.desktopMode
-        UserAgentManager.mode = if (new)
-            UserAgentManager.Mode.DESKTOP
-        else
-            UserAgentManager.Mode.MOBILE
-        _state.update { it.copy(desktopMode = new) }
-        // Reload current page
-        val url = _state.value.activeTab?.url
-        if (!url.isNullOrBlank()) navigate(url)
+        val newDesktop = !_state.value.desktopMode
+        val newMode = if (newDesktop) UserAgentManager.Mode.DESKTOP
+        else UserAgentManager.Mode.MOBILE
+        UserAgentManager.setMode(newMode)
+        UserAgentManager.save(getApplication())
+
+        _state.update {
+            it.copy(
+                desktopMode = newDesktop,
+                userAgentMode = newMode,
+                showOverlayMenu = false,
+            )
+        }
+
+        // Force reload current tab so UA applies
+        reloadCurrentTab()
     }
 
     val setUserAgent: (String) -> Unit = { ua ->
-        UserAgentManager.mode = when (ua) {
+        val newMode = when (ua) {
             "mobile" -> UserAgentManager.Mode.MOBILE
             "desktop" -> UserAgentManager.Mode.DESKTOP
-            else -> {
-                UserAgentManager.customUa = ua
-                UserAgentManager.Mode.CUSTOM
-            }
+            else -> UserAgentManager.Mode.CUSTOM
         }
-        _state.update { it.copy(showUserAgentPicker = false) }
-        val url = _state.value.activeTab?.url
-        if (!url.isNullOrBlank()) navigate(url)
+        UserAgentManager.setMode(newMode, if (newMode == UserAgentManager.Mode.CUSTOM) ua else null)
+        UserAgentManager.save(getApplication())
+
+        _state.update {
+            it.copy(
+                showUserAgentPicker = false,
+                userAgentMode = newMode,
+                desktopMode = newMode == UserAgentManager.Mode.DESKTOP,
+            )
+        }
+
+        reloadCurrentTab()
     }
 
     val goHome: () -> Unit = { navigate(HOME_URL) }
@@ -231,6 +259,22 @@ class BrowserViewModel @Inject constructor(
         viewModelScope.launch {
             val ok = ErudaManager.forceRedownload(getApplication())
             _state.update { it.copy(erudaReady = ok) }
+        }
+    }
+
+    private fun reloadCurrentTab() {
+        val url = _state.value.activeTab?.url ?: return
+        if (url.isBlank() || url.startsWith("about:")) return
+
+        viewModelScope.launch {
+            // Force WebView reload by writing a fresh url with timestamp
+            tabDao.upsert(
+                _state.value.activeTab!!.copy(url = "$url ")
+            )
+            tabDao.upsert(
+                _state.value.activeTab!!.copy(url = url)
+            )
+            _state.update { it.copy(isLoading = true, progress = 0) }
         }
     }
 
@@ -306,7 +350,8 @@ class BrowserViewModel @Inject constructor(
                 val bm = bookmarkDao.findByUrl(url)
                 val s = _state.value
                 if (s.isLoading || s.progress != 100 ||
-                    s.isCurrentUrlBookmarked != (bm != null)) {
+                    s.isCurrentUrlBookmarked != (bm != null)
+                ) {
                     _state.update {
                         it.copy(
                             isLoading = false,
@@ -351,17 +396,26 @@ class BrowserViewModel @Inject constructor(
     val onDownloadStart: (String, String?, String?, String?, Long) -> Unit =
         { url, userAgent, contentDisposition, mimeType, contentLength ->
             viewModelScope.launch {
-                val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
+                val ctx = getApplication<Application>()
+                val fileName = android.webkit.URLUtil.guessFileName(
+                    url, contentDisposition, mimeType
+                )
+                val dmId = DownloadManagerHelper.enqueue(
+                    context = ctx,
+                    url = url,
+                    userAgent = userAgent,
+                    contentDisposition = contentDisposition,
+                    mimeType = mimeType,
+                )
                 downloadDao.insert(
                     DownloadEntity(
-                        url = url, fileName = fileName, mimeType = mimeType,
-                        contentLength = contentLength, status = "QUEUED",
+                        id = if (dmId > 0) dmId else 0L,
+                        url = url,
+                        fileName = fileName,
+                        mimeType = mimeType,
+                        contentLength = contentLength,
+                        status = if (dmId > 0) "DOWNLOADING" else "FAILED",
                     )
-                )
-                com.nova.browser.data.DownloadManagerHelper.enqueue(
-                    context = getApplication(),
-                    url = url, userAgent = userAgent,
-                    contentDisposition = contentDisposition, mimeType = mimeType,
                 )
             }
         }
@@ -370,21 +424,20 @@ class BrowserViewModel @Inject constructor(
         viewModelScope.launch { downloadDao.delete(id) }
     }
 
+    val openDownload: (Long) -> Unit = { id ->
+        viewModelScope.launch {
+            val dl = downloads.value.firstOrNull { it.id == id }
+            if (dl != null) {
+                DownloadManagerHelper.openFile(getApplication(), dl.fileName)
+            }
+        }
+    }
+
     // ── My IP ──────────────────────────────────────────────
     private fun fetchMyIp() {
         viewModelScope.launch {
-            _state.update { it.copy(myIp = "Loading…") }
-            try {
-                val url = java.net.URL("https://api.ipify.org")
-                val conn = url.openConnection() as java.net.HttpURLConnection
-                conn.connectTimeout = 8000
-                conn.readTimeout = 8000
-                val ip = conn.inputStream.bufferedReader().use { it.readText() }
-                conn.disconnect()
-                _state.update { it.copy(myIp = ip.trim()) }
-            } catch (e: Exception) {
-                _state.update { it.copy(myIp = "Failed to fetch IP") }
-            }
+            val ip = MyIpFetcher.fetch()
+            _state.update { it.copy(myIp = ip, myIpLoading = false) }
         }
     }
 
@@ -398,7 +451,11 @@ class BrowserViewModel @Inject constructor(
             )
         )
         _state.update {
-            it.copy(activeTabId = id, urlInput = url, showSearchOverlay = false)
+            it.copy(
+                activeTabId = id,
+                urlInput = url,
+                showSearchOverlay = false,
+            )
         }
     }
 }
