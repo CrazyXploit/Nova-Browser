@@ -1,6 +1,10 @@
 package com.nova.browser.ui.browser
 
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nova.browser.data.AdBlocker
@@ -12,6 +16,8 @@ import com.nova.browser.data.DownloadManagerHelper
 import com.nova.browser.data.ErudaManager
 import com.nova.browser.data.HistoryDao
 import com.nova.browser.data.HistoryEntity
+import com.nova.browser.data.HttpsEnforcer
+import com.nova.browser.data.ImageQualityManager
 import com.nova.browser.data.MyIpFetcher
 import com.nova.browser.data.TabDao
 import com.nova.browser.data.TabEntity
@@ -31,6 +37,12 @@ import javax.inject.Inject
 
 private const val HOME_URL = "https://www.google.com"
 
+data class LongPressTarget(
+    val type: String,       // "link", "image", "text", "phone", "email"
+    val url: String,
+    val extra: String = "",
+)
+
 data class BrowserUiState(
     val tabs: List<TabEntity> = emptyList(),
     val activeTabId: String? = null,
@@ -44,12 +56,22 @@ data class BrowserUiState(
     val showSiteInfo: Boolean = false,
     val showIpOverlay: Boolean = false,
     val showUserAgentPicker: Boolean = false,
+    val showImageQualityPicker: Boolean = false,
+    val showInPageFind: Boolean = false,
+    val findQuery: String = "",
+    val findMatchCount: Int = 0,
+    val findCurrentMatch: Int = 0,
+    val longPressTarget: LongPressTarget? = null,
     val isIncognito: Boolean = false,
     val adBlockEnabled: Boolean = true,
     val erudaEnabled: Boolean = true,
     val erudaReady: Boolean = false,
     val desktopMode: Boolean = false,
     val userAgentMode: UserAgentManager.Mode = UserAgentManager.Mode.MOBILE,
+    val imageQuality: ImageQualityManager.Quality = ImageQualityManager.Quality.HIGH,
+    val dataSaver: Boolean = false,
+    val httpsEnforced: Boolean = true,
+    val trackersBlocked: Int = 0,
     val isCurrentUrlBookmarked: Boolean = false,
     val myIp: String = "",
     val myIpLoading: Boolean = false,
@@ -82,22 +104,60 @@ class BrowserViewModel @Inject constructor(
 
     fun attachWebView(wv: android.webkit.WebView) {
         webViewRef = wv
+        // Long-press handler
+        wv.setOnLongClickListener {
+            val result = wv.hitTestResult
+            val extra = result.extra ?: ""
+            val target = when (result.type) {
+                android.webkit.WebView.HitTestResult.SRC_ANCHOR_TYPE ->
+                    LongPressTarget("link", extra)
+                android.webkit.WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE ->
+                    LongPressTarget("image", extra)
+                android.webkit.WebView.HitTestResult.IMAGE_TYPE ->
+                    LongPressTarget("image", extra)
+                android.webkit.WebView.HitTestResult.PHONE_TYPE ->
+                    LongPressTarget("phone", extra)
+                android.webkit.WebView.HitTestResult.EMAIL_TYPE ->
+                    LongPressTarget("email", extra)
+                else -> return@setOnLongClickListener false
+            }
+            _state.update { it.copy(longPressTarget = target) }
+            true
+        }
+        false
     }
 
-    val goBack: () -> Unit = {
-        webViewRef?.let { if (it.canGoBack()) it.goBack() }
-    }
-    val goForward: () -> Unit = {
-        webViewRef?.let { if (it.canGoForward()) it.goForward() }
-    }
-    val reload: () -> Unit = {
-        webViewRef?.reload()
-    }
-    val stopLoading: () -> Unit = {
-        webViewRef?.stopLoading()
-    }
+    val goBack: () -> Unit = { webViewRef?.let { if (it.canGoBack()) it.goBack() } }
+    val goForward: () -> Unit = { webViewRef?.let { if (it.canGoForward()) it.goForward() } }
+    val reload: () -> Unit = { webViewRef?.reload() }
+    val stopLoading: () -> Unit = { webViewRef?.stopLoading() }
     val canGoBack: () -> Boolean = { webViewRef?.canGoBack() == true }
     val canGoForward: () -> Boolean = { webViewRef?.canGoForward() == true }
+
+    // Find in page
+    val findText: (String) -> Unit = { query ->
+        val wv = webViewRef
+        if (wv != null) {
+            wv.findAllAsync(query)
+            wv.findNext(true)
+            _state.update { it.copy(findQuery = query) }
+        }
+    }
+    val findNext: () -> Unit = {
+        webViewRef?.findNext(true)
+        _state.update { it.copy(findCurrentMatch = it.findCurrentMatch + 1) }
+    }
+    val findPrev: () -> Unit = {
+        webViewRef?.findNext(false)
+        _state.update {
+            it.copy(findCurrentMatch = (it.findCurrentMatch - 1).coerceAtLeast(1))
+        }
+    }
+    val closeFind: () -> Unit = {
+        webViewRef?.clearMatches()
+        _state.update { it.copy(showInPageFind = false, findQuery = "") }
+    }
+    val openFind: () -> Unit = { _state.update { it.copy(showInPageFind = true) } }
 
     init {
         AdBlocker.enabled = true
@@ -105,10 +165,16 @@ class BrowserViewModel @Inject constructor(
 
         val ctx = getApplication<Application>()
         UserAgentManager.load(ctx)
+        ImageQualityManager.load(ctx)
+        HttpsEnforcer.load(ctx)
+
         _state.update {
             it.copy(
                 userAgentMode = UserAgentManager.mode,
                 desktopMode = UserAgentManager.mode == UserAgentManager.Mode.DESKTOP,
+                imageQuality = ImageQualityManager.quality,
+                dataSaver = ImageQualityManager.dataSaver,
+                httpsEnforced = HttpsEnforcer.enforceHttps,
             )
         }
 
@@ -129,9 +195,7 @@ class BrowserViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            if (tabDao.observeAll().first().isEmpty()) {
-                createTab(HOME_URL)
-            }
+            if (tabDao.observeAll().first().isEmpty()) createTab(HOME_URL)
         }
     }
 
@@ -144,9 +208,7 @@ class BrowserViewModel @Inject constructor(
             val remaining = _state.value.tabs.filterNot { it.id == id }
             if (_state.value.activeTabId == id) {
                 val next = remaining.firstOrNull()
-                _state.update {
-                    it.copy(activeTabId = next?.id, urlInput = next?.url.orEmpty())
-                }
+                _state.update { it.copy(activeTabId = next?.id, urlInput = next?.url.orEmpty()) }
             }
         }
     }
@@ -175,36 +237,33 @@ class BrowserViewModel @Inject constructor(
             )
         }
     }
-
     val closeUrlPopup: () -> Unit = {
         _state.update { it.copy(showUrlPopup = false, urlMaximized = false) }
     }
-
     val toggleUrlMaximize: () -> Unit = {
         _state.update { it.copy(urlMaximized = !it.urlMaximized) }
     }
-
     val onUrlInputChange: (String) -> Unit = { input ->
         _state.update { it.copy(urlInput = input) }
     }
-
     val navigate: (String) -> Unit = { input ->
         val id = _state.value.activeTabId
         if (id != null && input.isNotBlank()) {
             viewModelScope.launch {
                 val normalized = UrlUtils.normalize(input)
+                val finalUrl = if (HttpsEnforcer.enforceHttps)
+                    HttpsEnforcer.upgrade(normalized) else normalized
                 tabDao.upsert(
                     TabEntity(
-                        id = id,
-                        url = normalized,
-                        title = UrlUtils.displayHost(normalized),
+                        id = id, url = finalUrl,
+                        title = UrlUtils.displayHost(finalUrl),
                         faviconUrl = null,
                         lastActive = System.currentTimeMillis(),
                     )
                 )
                 _state.update {
                     it.copy(
-                        urlInput = normalized,
+                        urlInput = finalUrl,
                         isLoading = true,
                         progress = 0,
                         showUrlPopup = false,
@@ -214,12 +273,9 @@ class BrowserViewModel @Inject constructor(
             }
         }
     }
+    val navigateFromPopup: () -> Unit = { navigate(_state.value.urlInput) }
 
-    val navigateFromPopup: () -> Unit = {
-        navigate(_state.value.urlInput)
-    }
-
-    // ── Overlay toggles ────────────────────────────────────
+    // ── Overlays ───────────────────────────────────────────
     val toggleTabSwitcher: () -> Unit = {
         _state.update { it.copy(showTabSwitcher = !it.showTabSwitcher) }
     }
@@ -248,10 +304,42 @@ class BrowserViewModel @Inject constructor(
     val closeUserAgentPicker: () -> Unit = {
         _state.update { it.copy(showUserAgentPicker = false) }
     }
+    val openImageQualityPicker: () -> Unit = {
+        _state.update { it.copy(showImageQualityPicker = true) }
+    }
+    val closeImageQualityPicker: () -> Unit = {
+        _state.update { it.copy(showImageQualityPicker = false) }
+    }
+    val closeLongPress: () -> Unit = {
+        _state.update { it.copy(longPressTarget = null) }
+    }
+
+    val setImageQuality: (ImageQualityManager.Quality) -> Unit = { q ->
+        ImageQualityManager.setQuality(q)
+        ImageQualityManager.save(getApplication())
+        _state.update { it.copy(imageQuality = q, showImageQualityPicker = false) }
+        reload()
+    }
+
+    val toggleDataSaver: () -> Unit = {
+        val new = !ImageQualityManager.dataSaver
+        ImageQualityManager.setDataSaver(new)
+        ImageQualityManager.save(getApplication())
+        _state.update { it.copy(dataSaver = new) }
+        reload()
+    }
+
+    val toggleHttpsEnforcement: () -> Unit = {
+        HttpsEnforcer.enforceHttps = !HttpsEnforcer.enforceHttps
+        HttpsEnforcer.save(getApplication())
+        _state.update { it.copy(httpsEnforced = HttpsEnforcer.enforceHttps) }
+    }
 
     val toggleAdBlock: () -> Unit = {
         AdBlocker.enabled = !AdBlocker.enabled
-        _state.update { it.copy(adBlockEnabled = AdBlocker.enabled) }
+        _state.update {
+            it.copy(adBlockEnabled = AdBlocker.enabled, trackersBlocked = AdBlocker.totalBlocked())
+        }
     }
     val toggleEruda: () -> Unit = {
         ErudaManager.enabled = !ErudaManager.enabled
@@ -264,7 +352,6 @@ class BrowserViewModel @Inject constructor(
             createTab(HOME_URL)
         }
     }
-
     val toggleDesktopMode: () -> Unit = {
         val newDesktop = !_state.value.desktopMode
         val newMode = if (newDesktop) UserAgentManager.Mode.DESKTOP
@@ -280,7 +367,6 @@ class BrowserViewModel @Inject constructor(
         }
         reload()
     }
-
     val setUserAgent: (String) -> Unit = { ua ->
         val newMode = when (ua) {
             "mobile" -> UserAgentManager.Mode.MOBILE
@@ -298,13 +384,54 @@ class BrowserViewModel @Inject constructor(
         }
         reload()
     }
-
     val goHome: () -> Unit = { navigate(HOME_URL) }
-
     val redownloadEruda: () -> Unit = {
         viewModelScope.launch {
             val ok = ErudaManager.forceRedownload(getApplication())
             _state.update { it.copy(erudaReady = ok) }
+        }
+    }
+
+    // ── Long-press actions ─────────────────────────────────
+    val copyToClipboard: (String) -> Unit = { text ->
+        val ctx = getApplication<Application>()
+        val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("Nova", text))
+        _state.update { it.copy(longPressTarget = null) }
+    }
+
+    val shareText: (String) -> Unit = { text ->
+        val ctx = getApplication<Application>()
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        val chooser = Intent.createChooser(intent, "Share").apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ctx.startActivity(chooser)
+        _state.update { it.copy(longPressTarget = null) }
+    }
+
+    val openInNewTab: (String) -> Unit = { url ->
+        newTab(url)
+        _state.update { it.copy(longPressTarget = null) }
+    }
+
+    val downloadUrl: (String) -> Unit = { url ->
+        viewModelScope.launch {
+            val ctx = getApplication<Application>()
+            val fileName = android.webkit.URLUtil.guessFileName(url, null, null)
+            val dmId = DownloadManagerHelper.enqueue(ctx, url, null, null, null)
+            downloadDao.insert(
+                DownloadEntity(
+                    id = if (dmId > 0) dmId else System.currentTimeMillis(),
+                    url = url, fileName = fileName,
+                    mimeType = null, contentLength = 0,
+                    status = "DOWNLOADING",
+                )
+            )
+            _state.update { it.copy(longPressTarget = null) }
         }
     }
 
@@ -316,7 +443,12 @@ class BrowserViewModel @Inject constructor(
     val onProgress: (Int) -> Unit = { p ->
         val c = _state.value.progress
         if (c / 10 != p / 10 || p == 100) {
-            _state.update { it.copy(progress = p) }
+            _state.update {
+                it.copy(
+                    progress = p,
+                    trackersBlocked = AdBlocker.totalBlocked(),
+                )
+            }
         }
     }
 
@@ -332,36 +464,28 @@ class BrowserViewModel @Inject constructor(
             ) {
                 tabDao.upsert(
                     TabEntity(
-                        id = id,
-                        url = url,
+                        id = id, url = url,
                         title = title.ifBlank { UrlUtils.displayHost(url) },
                         faviconUrl = newFavicon,
                         lastActive = existing?.lastActive ?: System.currentTimeMillis(),
                         isIncognito = _state.value.isIncognito,
                     )
                 )
-                // Only insert into history if the URL actually changed (avoid dupes)
-                if (!_state.value.isIncognito &&
-                    existing?.url != url
-                ) {
+                if (!_state.value.isIncognito && existing?.url != url) {
                     historyDao.insert(HistoryEntity(url = url, title = title))
                 }
             }
 
             val bm = bookmarkDao.findByUrl(url)
             val s = _state.value
-            if (s.isLoading || s.progress != 100 ||
-                s.isCurrentUrlBookmarked != (bm != null) ||
-                (!s.showUrlPopup && s.urlInput != url)
-            ) {
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        progress = 100,
-                        isCurrentUrlBookmarked = bm != null,
-                        urlInput = if (s.showUrlPopup) s.urlInput else url,
-                    )
-                }
+            _state.update {
+                it.copy(
+                    isLoading = false,
+                    progress = 100,
+                    isCurrentUrlBookmarked = bm != null,
+                    urlInput = if (s.showUrlPopup) s.urlInput else url,
+                    trackersBlocked = AdBlocker.totalBlocked(),
+                )
             }
         }
     }
@@ -385,16 +509,12 @@ class BrowserViewModel @Inject constructor(
             }
         }
     }
-
     val removeBookmark: (Long) -> Unit = { id ->
         viewModelScope.launch { bookmarkDao.delete(id) }
     }
-
-    // ── History ────────────────────────────────────────────
     val removeHistory: (Long) -> Unit = { id ->
         viewModelScope.launch { historyDao.delete(id) }
     }
-
     val clearHistory: () -> Unit = {
         viewModelScope.launch { historyDao.clear() }
     }
@@ -409,9 +529,7 @@ class BrowserViewModel @Inject constructor(
                 downloadDao.insert(
                     DownloadEntity(
                         id = if (dmId > 0) dmId else System.currentTimeMillis(),
-                        url = url,
-                        fileName = fileName,
-                        mimeType = mime,
+                        url = url, fileName = fileName, mimeType = mime,
                         contentLength = len,
                         status = if (dmId > 0) "DOWNLOADING" else "FAILED",
                     )
@@ -422,7 +540,6 @@ class BrowserViewModel @Inject constructor(
     val removeDownload: (Long) -> Unit = { id ->
         viewModelScope.launch { downloadDao.delete(id) }
     }
-
     val openDownload: (Long) -> Unit = { id ->
         viewModelScope.launch {
             val dl = downloads.value.firstOrNull { it.id == id }
