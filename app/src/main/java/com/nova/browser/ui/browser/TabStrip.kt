@@ -1,12 +1,5 @@
 package com.nova.browser.ui.browser
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,18 +22,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.nova.browser.data.TabEntity
 
 @Composable
@@ -50,24 +38,20 @@ fun TabStrip(
     onSelect: (String) -> Unit,
     onClose: (String) -> Unit,
 ) {
-    AnimatedVisibility(
-        visible = tabs.size > 1,
-        enter = expandVertically() + fadeIn(),
-        exit = shrinkVertically() + fadeOut(),
+    if (tabs.size <= 1) return
+
+    LazyRow(
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        contentPadding = PaddingValues(horizontal = 4.dp),
     ) {
-        LazyRow(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            contentPadding = PaddingValues(horizontal = 4.dp),
-        ) {
-            items(tabs, key = { it.id }) { tab ->
-                TabChip(
-                    tab = tab,
-                    active = tab.id == activeId,
-                    onSelect = { onSelect(tab.id) },
-                    onClose = { onClose(tab.id) },
-                )
-            }
+        items(tabs, key = { it.id }) { tab ->
+            TabChip(
+                tab = tab,
+                active = tab.id == activeId,
+                onSelect = { onSelect(tab.id) },
+                onClose = { onClose(tab.id) },
+            )
         }
     }
 }
@@ -79,14 +63,10 @@ private fun TabChip(
     onSelect: () -> Unit,
     onClose: () -> Unit,
 ) {
-    val bg by animateColorAsState(
-        targetValue = if (active)
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-        else
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        animationSpec = tween(250),
-        label = "bg",
-    )
+    val bg = if (active)
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+    else
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
 
     Row(
         modifier = Modifier
@@ -98,29 +78,15 @@ private fun TabChip(
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (!tab.faviconUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(tab.faviconUrl)
-                    .crossfade(false)
-                    .build(),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(16.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                contentScale = ContentScale.Crop,
-            )
-        } else {
-            Box(
-                Modifier
-                    .size(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(
-                        if (active) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-            )
-        }
+        Box(
+            Modifier
+                .size(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(
+                    if (active) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+        )
 
         Spacer(Modifier.width(8.dp))
 
