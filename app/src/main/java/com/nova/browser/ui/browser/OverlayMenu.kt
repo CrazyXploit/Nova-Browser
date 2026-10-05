@@ -26,8 +26,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Visibility
@@ -40,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +61,9 @@ fun OverlayMenu(
     onToggleIncognito: () -> Unit,
     onUserAgent: () -> Unit,
     onMyIp: () -> Unit,
+    onHistory: () -> Unit,
+    onBookmarks: () -> Unit,
+    onDownloads: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AnimatedVisibility(
@@ -64,9 +71,8 @@ fun OverlayMenu(
         enter = fadeIn(tween(180)) + slideInVertically(initialOffsetY = { it }),
         exit = fadeOut(tween(150)) + slideOutVertically(targetOffsetY = { it }),
     ) {
-        // Respect system nav bar height
         val navBarPadding = WindowInsets.navigationBars.asPaddingValues()
-        val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+        val screenWidth = LocalConfiguration.current.screenWidthDp
         val menuWidth = (screenWidth - 32).coerceAtMost(400).dp
 
         Box(
@@ -84,7 +90,7 @@ fun OverlayMenu(
                         end = 16.dp,
                     )
                     .width(menuWidth)
-                    .heightIn(max = 480.dp)
+                    .heightIn(max = 520.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(MaterialTheme.colorScheme.surface)
                     .clickable { /* consume */ }
@@ -106,6 +112,9 @@ fun OverlayMenu(
 
                 Spacer(Modifier.size(4.dp))
 
+                ActionItem(Icons.Default.History, "History", onHistory)
+                ActionItem(Icons.Default.Bookmark, "Bookmarks", onBookmarks)
+                ActionItem(Icons.Default.Download, "Downloads", onDownloads)
                 ActionItem(Icons.Default.Language, "User Agent", onUserAgent)
                 ActionItem(Icons.Default.Public, "My IP Address", onMyIp)
             }
