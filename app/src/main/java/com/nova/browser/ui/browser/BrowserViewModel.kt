@@ -18,6 +18,7 @@ import com.nova.browser.data.HistoryDao
 import com.nova.browser.data.HistoryEntity
 import com.nova.browser.data.HttpsEnforcer
 import com.nova.browser.data.ImageQualityManager
+import com.nova.browser.data.MediaSniffer
 import com.nova.browser.data.MyIpFetcher
 import com.nova.browser.data.SearchEngineManager
 import com.nova.browser.data.TabDao
@@ -62,6 +63,8 @@ data class BrowserUiState(
     val showImageQualityPicker: Boolean = false,
     val showSearchEnginePicker: Boolean = false,
     val showInPageFind: Boolean = false,
+    val showMediaPanel: Boolean = false,
+    val mediaItems: List<MediaSniffer.MediaItem> = emptyList(),
     val findQuery: String = "",
     val findMatchCount: Int = 0,
     val findCurrentMatch: Int = 0,
@@ -73,6 +76,7 @@ data class BrowserUiState(
     val desktopMode: Boolean = false,
     val userAgentMode: UserAgentManager.Mode = UserAgentManager.Mode.MOBILE,
     val imageQuality: ImageQualityManager.Quality = ImageQualityManager.Quality.HIGH,
+    val effectiveQualityLabel: String = "High",
     val dataSaver: Boolean = false,
     val httpsEnforced: Boolean = true,
     val trackersBlocked: Int = 0,
@@ -134,7 +138,17 @@ class BrowserViewModel @Inject constructor(
         false
     }
 
-    val goBack: () -> Unit = { webViewRef?.let { if (it.canGoBack()) it.goBack() } }
+    // === BACK NAVIGATION — go home, don't exit ===
+    val goBackOrHome: () -> Unit = {
+        val wv = webViewRef
+        if (wv != null && wv.canGoBack()) {
+            wv.goBack()
+        } else {
+            // No history → go to home dashboard
+            goHome()
+        }
+    }
+
     val goForward: () -> Unit = { webViewRef?.let { if (it.canGoForward()) it.goForward() } }
     val reload: () -> Unit = { webViewRef?.reload() }
     val stopLoading: () -> Unit = { webViewRef?.stopLoading() }
@@ -162,9 +176,63 @@ class BrowserViewModel @Inject constructor(
     }
     val openFind: () -> Unit = { _state.update { it.copy(showInPageFind = true) } }
 
+    // === MEDIA PANEL ===
+    val openMediaPanel: () -> Unit = {
+        _state.update {
+            it.copy(
+                showMediaPanel = true,
+                mediaItems = MediaSniffer.list(),
+            )
+        }
+    }
+    val closeMediaPanel: () -> Unit = { _state.update { it.copy(showMediaPanel = false) } }
+
+    val playMedia: (MediaSniffer.MediaItem) -> Unit = { item ->
+        // Open media URL in WebView for playback
+        val id = _state.value.activeTabId
+        if (id != null) {
+            viewModelScope.launch {
+                tabDao.upsert(
+                    TabEntity(
+                        id = id, url = item.url,
+                        title = item.fileName,
+                        faviconUrl = null,
+                        lastActive = System.currentTimeMillis(),
+                    )
+                )
+                _state.update {
+                    it.copy(
+                        urlInput = item.url,
+                        isLoading = true,
+                        progress = 0,
+                        isHomeVisible = false,
+                        showMediaPanel = false,
+                    )
+                }
+            }
+        }
+    }
+
+    val downloadMedia: (MediaSniffer.MediaItem) -> Unit = { item ->
+        viewModelScope.launch {
+            val ctx = getApplication<Application>()
+            val fileName = item.fileName.ifBlank { "media" }
+            val dmId = DownloadManagerHelper.enqueue(ctx, item.url, null, null, item.contentType)
+            downloadDao.insert(
+                DownloadEntity(
+                    id = if (dmId > 0) dmId else System.currentTimeMillis(),
+                    url = item.url, fileName = fileName,
+                    mimeType = item.contentType, contentLength = item.sizeBytes,
+                    status = if (dmId > 0) "DOWNLOADING" else "FAILED",
+                )
+            )
+        }
+    }
+
     init {
         AdBlocker.enabled = true
         ErudaManager.enabled = true
+        MediaSniffer.enabled = true
 
         val ctx = getApplication<Application>()
         UserAgentManager.load(ctx)
@@ -178,6 +246,7 @@ class BrowserViewModel @Inject constructor(
                 userAgentMode = UserAgentManager.mode,
                 desktopMode = UserAgentManager.mode == UserAgentManager.Mode.DESKTOP,
                 imageQuality = ImageQualityManager.quality,
+                effectiveQualityLabel = ImageQualityManager.effectiveQualityLabel(),
                 dataSaver = ImageQualityManager.dataSaver,
                 httpsEnforced = HttpsEnforcer.enforceHttps,
                 searchEngineId = SearchEngineManager.currentId,
@@ -226,6 +295,10 @@ class BrowserViewModel @Inject constructor(
                 delay(2_000)
                 UsageStats.syncBlockedCounts()
                 syncStatsToState()
+                // Live sync media items if panel is open
+                if (_state.value.showMediaPanel) {
+                    _state.update { it.copy(mediaItems = MediaSniffer.list()) }
+                }
             }
         }
     }
@@ -290,6 +363,7 @@ class BrowserViewModel @Inject constructor(
         val id = _state.value.activeTabId
         if (id != null) {
             viewModelScope.launch {
+                MediaSniffer.reset()
                 tabDao.upsert(
                     TabEntity(
                         id = id,
@@ -417,18 +491,31 @@ class BrowserViewModel @Inject constructor(
     }
 
     // ── Toggles ────────────────────────────────────────────
+    // FIX: When data saver is on, quality label shows Low
     val setImageQuality: (ImageQualityManager.Quality) -> Unit = { q ->
         ImageQualityManager.updateQuality(q)
         ImageQualityManager.save(getApplication())
-        _state.update { it.copy(imageQuality = q, showImageQualityPicker = false) }
+        _state.update {
+            it.copy(
+                imageQuality = q,
+                effectiveQualityLabel = ImageQualityManager.effectiveQualityLabel(),
+                showImageQualityPicker = false,
+            )
+        }
         reload()
     }
 
+    // FIX: Immediately sync effective quality label when data saver toggled
     val toggleDataSaver: () -> Unit = {
         val new = !ImageQualityManager.dataSaver
         ImageQualityManager.updateDataSaver(new)
         ImageQualityManager.save(getApplication())
-        _state.update { it.copy(dataSaver = new) }
+        _state.update {
+            it.copy(
+                dataSaver = new,
+                effectiveQualityLabel = ImageQualityManager.effectiveQualityLabel(),
+            )
+        }
         reload()
     }
 
