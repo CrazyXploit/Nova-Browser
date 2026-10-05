@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
 import com.nova.browser.data.AdBlocker
+import com.nova.browser.data.DataSaver
 import com.nova.browser.data.ErudaManager
 import com.nova.browser.data.HttpsEnforcer
 import com.nova.browser.data.ImageQualityManager
@@ -67,8 +68,8 @@ fun WebViewContainer(
     }
 
     LaunchedEffect(imageQuality, dataSaver) {
-        val holderWV = holder.webView ?: return@LaunchedEffect
-        ImageQualityManager.applyTo(holderWV.settings)
+        val wv = holder.webView ?: return@LaunchedEffect
+        ImageQualityManager.applyTo(wv.settings)
     }
 
     AndroidView(
@@ -127,16 +128,20 @@ fun WebViewContainer(
                     ): WebResourceResponse? {
                         val uri = request?.url ?: return super.shouldInterceptRequest(view, request)
 
+                        // Asset loader for Eruda
                         val intercepted = assetLoader.shouldInterceptRequest(uri)
                         if (intercepted != null) return intercepted
 
+                        // Ad blocker
                         if (AdBlocker.shouldBlock(uri.toString())) {
                             return AdBlocker.blockedResponse()
                         }
 
+                        // Image blocking — track data saved
                         if (ImageQualityManager.shouldBlockImages()) {
                             val accept = request.requestHeaders["Accept"]
                             if (accept?.contains("image/") == true) {
+                                DataSaver.onBlockedImage()
                                 return AdBlocker.blockedResponse()
                             }
                         }
@@ -188,13 +193,12 @@ fun WebViewContainer(
                 holder.webView = this
                 currentOnWebViewCreated(this)
 
-                // Load URL — if home placeholder, load blank (dashboard shown instead)
                 if (initialUrl == HOME_PLACEHOLDER || initialUrl.isBlank()) {
                     loadUrl("about:blank")
                 } else {
                     val target = if (HttpsEnforcer.enforceHttps)
                         HttpsEnforcer.upgrade(initialUrl) else initialUrl
-                    loadUrl(target)
+                    loadUrl(target, ImageQualityManager.extraHeaders())
                 }
             }
         },
@@ -210,7 +214,7 @@ fun WebViewContainer(
                 } else if (!initialUrl.startsWith("about:")) {
                     val target = if (HttpsEnforcer.enforceHttps)
                         HttpsEnforcer.upgrade(initialUrl) else initialUrl
-                    wv.loadUrl(target)
+                    wv.loadUrl(target, ImageQualityManager.extraHeaders())
                 }
             }
         },
@@ -229,11 +233,7 @@ fun WebViewContainer(
 
 private fun injectEruda(view: WebView?) {
     if (view == null) return
-    view.evaluateJs(ErudaManager.buildInitScript())
-}
-
-private fun WebView.evaluateJs(script: String) {
     try {
-        evaluateJavascript(script, null)
+        view.evaluateJavascript(ErudaManager.buildInitScript(), null)
     } catch (_: Exception) { }
 }
