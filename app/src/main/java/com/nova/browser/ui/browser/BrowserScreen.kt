@@ -12,8 +12,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nova.browser.ui.home.HomeDashboard
 
-private const val HOME_URL = "https://www.google.com"
+private const val HOME_PLACEHOLDER = "about:home"
 
 @Composable
 fun BrowserScreen(
@@ -33,6 +34,7 @@ fun BrowserScreen(
     BackHandler(enabled = state.showIpOverlay) { vm.closeIpOverlay() }
     BackHandler(enabled = state.showUserAgentPicker) { vm.closeUserAgentPicker() }
     BackHandler(enabled = state.showImageQualityPicker) { vm.closeImageQualityPicker() }
+    BackHandler(enabled = state.showSearchEnginePicker) { vm.closeSearchEnginePicker() }
     BackHandler(enabled = vm.canGoBack()) { vm.goBack() }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -40,7 +42,7 @@ fun BrowserScreen(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 UrlBar(
-                    url = state.activeTab?.url.orEmpty(),
+                    url = if (state.isHomeVisible) "" else state.activeTab?.url.orEmpty(),
                     loading = state.isLoading,
                     progress = state.progress,
                     isIncognito = state.isIncognito,
@@ -76,18 +78,29 @@ fun BrowserScreen(
                     .padding(padding)
                     .fillMaxSize()
             ) {
-                WebViewContainer(
-                    initialUrl = state.activeTab?.url.orEmpty(),
-                    isIncognito = state.isIncognito,
-                    userAgentMode = state.userAgentMode,
-                    imageQuality = state.imageQuality,
-                    dataSaver = state.dataSaver,
-                    onPageStarted = vm.onPageStarted,
-                    onProgress = vm.onProgress,
-                    onPageFinished = vm.onPageFinished,
-                    onDownloadStart = vm.onDownloadStart,
-                    onWebViewCreated = { wv -> vm.attachWebView(wv) },
-                )
+                if (state.isHomeVisible) {
+                    HomeDashboard(
+                        engineName = state.searchEngineName,
+                        trackersBlocked = state.statsTrackers,
+                        adsBlocked = state.statsAds,
+                        timeSavedMs = state.statsTimeSavedMs,
+                        timeSpentMs = state.statsTimeSpentMs,
+                        onSearch = vm.searchFromHome,
+                    )
+                } else {
+                    WebViewContainer(
+                        initialUrl = state.activeTab?.url.orEmpty(),
+                        isIncognito = state.isIncognito,
+                        userAgentMode = state.userAgentMode,
+                        imageQuality = state.imageQuality,
+                        dataSaver = state.dataSaver,
+                        onPageStarted = vm.onPageStarted,
+                        onProgress = vm.onProgress,
+                        onPageFinished = vm.onPageFinished,
+                        onDownloadStart = vm.onDownloadStart,
+                        onWebViewCreated = { wv -> vm.attachWebView(wv) },
+                    )
+                }
             }
         }
 
@@ -136,6 +149,14 @@ fun BrowserScreen(
             )
         }
 
+        if (state.showSearchEnginePicker) {
+            SearchEnginePicker(
+                currentId = state.searchEngineId,
+                onPick = vm.selectSearchEngine,
+                onDismiss = vm.closeSearchEnginePicker,
+            )
+        }
+
         InPageFind(
             visible = state.showInPageFind,
             matchCount = state.findMatchCount,
@@ -146,7 +167,6 @@ fun BrowserScreen(
             onDismiss = vm.closeFind,
         )
 
-        // Long-press menu
         val target = state.longPressTarget
         LongPressMenu(
             visible = target != null,
@@ -211,6 +231,7 @@ fun BrowserScreen(
         onMyIp = { vm.closeOverlayMenu(); vm.openIpOverlay() },
         onImageQuality = { vm.closeOverlayMenu(); vm.openImageQualityPicker() },
         onFind = { vm.closeOverlayMenu(); vm.openFind() },
+        onSearchEngine = { vm.closeOverlayMenu(); vm.openSearchEnginePicker() },
         onHistory = { vm.closeOverlayMenu(); onOpenHistory() },
         onBookmarks = { vm.closeOverlayMenu(); onOpenBookmarks() },
         onDownloads = { vm.closeOverlayMenu(); onOpenDownloads() },
@@ -223,7 +244,7 @@ fun BrowserScreen(
             activeId = state.activeTabId,
             onSelect = vm.selectTab,
             onClose = vm.closeTab,
-            onNew = { vm.newTab(HOME_URL) },
+            onNew = { vm.newTab(HOME_PLACEHOLDER) },
             onDismiss = vm.toggleTabSwitcher,
         )
     }
