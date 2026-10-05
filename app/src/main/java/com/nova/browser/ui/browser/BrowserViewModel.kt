@@ -34,7 +34,7 @@ private const val HOME_URL = "https://www.google.com"
 data class BrowserUiState(
     val tabs: List<TabEntity> = emptyList(),
     val activeTabId: String? = null,
-    val urlInput: String = "",
+    val urlInput: String = "",              // ← what the popup is editing
     val isLoading: Boolean = false,
     val progress: Int = 0,
     val showTabSwitcher: Boolean = false,
@@ -78,7 +78,6 @@ class BrowserViewModel @Inject constructor(
     val downloads: StateFlow<List<DownloadEntity>> = downloadDao.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // ── WebView reference for go/back/forward/reload ───────
     @Volatile private var webViewRef: android.webkit.WebView? = null
 
     fun attachWebView(wv: android.webkit.WebView) {
@@ -182,6 +181,7 @@ class BrowserViewModel @Inject constructor(
         _state.update { it.copy(urlMaximized = !it.urlMaximized) }
     }
 
+    // Called on every keystroke by BasicTextField — state stays in VM
     val onUrlInputChange: (String) -> Unit = { input ->
         _state.update { it.copy(urlInput = input) }
     }
@@ -211,6 +211,11 @@ class BrowserViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    // Navigate using the current urlInput value (called by popup's Go button)
+    val navigateFromPopup: () -> Unit = {
+        navigate(_state.value.urlInput)
     }
 
     // ── Overlay toggles ────────────────────────────────────
@@ -349,6 +354,8 @@ class BrowserViewModel @Inject constructor(
                         isLoading = false,
                         progress = 100,
                         isCurrentUrlBookmarked = bm != null,
+                        // Only sync urlInput if popup is NOT open
+                        urlInput = if (s.showUrlPopup) s.urlInput else url,
                     )
                 }
             }
