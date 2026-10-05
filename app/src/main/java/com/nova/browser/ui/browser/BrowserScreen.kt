@@ -25,8 +25,10 @@ fun BrowserScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
 
+    // Back handling — CLOSE OVERLAYS first, then go back, then home
     BackHandler(enabled = state.longPressTarget != null) { vm.closeLongPress() }
     BackHandler(enabled = state.showInPageFind) { vm.closeFind() }
+    BackHandler(enabled = state.showMediaPanel) { vm.closeMediaPanel() }
     BackHandler(enabled = state.showUrlPopup) { vm.closeUrlPopup() }
     BackHandler(enabled = state.showTabSwitcher) { vm.toggleTabSwitcher() }
     BackHandler(enabled = state.showOverlayMenu) { vm.closeOverlayMenu() }
@@ -35,7 +37,14 @@ fun BrowserScreen(
     BackHandler(enabled = state.showUserAgentPicker) { vm.closeUserAgentPicker() }
     BackHandler(enabled = state.showImageQualityPicker) { vm.closeImageQualityPicker() }
     BackHandler(enabled = state.showSearchEnginePicker) { vm.closeSearchEnginePicker() }
-    BackHandler(enabled = vm.canGoBack()) { vm.goBack() }
+
+    // System back: if can't go back in history, go to home (don't exit)
+    BackHandler(enabled = !state.isHomeVisible) { vm.goBackOrHome() }
+    BackHandler(enabled = state.isHomeVisible) {
+        // At home — allow the OS to handle (exit app)
+        // Returning false here would... but BackHandler can't return false.
+        // So we DON'T register this one. Remove the line below if you want exit.
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -64,7 +73,7 @@ fun BrowserScreen(
                     canGoBack = vm.canGoBack(),
                     canGoForward = vm.canGoForward(),
                     tabCount = state.tabs.size,
-                    onBack = vm.goBack,
+                    onBack = vm.goBackOrHome,
                     onForward = vm.goForward,
                     onHome = vm.goHome,
                     onTabs = vm.toggleTabSwitcher,
@@ -114,6 +123,14 @@ fun BrowserScreen(
             onRefresh = vm.reload,
             onToggleMaximize = vm.toggleUrlMaximize,
             onDismiss = vm.closeUrlPopup,
+        )
+
+        MediaPanel(
+            visible = state.showMediaPanel,
+            items = state.mediaItems,
+            onPlay = vm.playMedia,
+            onDownload = vm.downloadMedia,
+            onDismiss = vm.closeMediaPanel,
         )
 
         if (state.showSiteInfo) {
@@ -216,12 +233,7 @@ fun BrowserScreen(
         desktopMode = state.desktopMode,
         isIncognito = state.isIncognito,
         httpsEnforced = state.httpsEnforced,
-        imageQualityLabel = when (state.imageQuality) {
-            com.nova.browser.data.ImageQualityManager.Quality.HIGH -> "High"
-            com.nova.browser.data.ImageQualityManager.Quality.MEDIUM -> "Medium"
-            com.nova.browser.data.ImageQualityManager.Quality.LOW -> "Low"
-            com.nova.browser.data.ImageQualityManager.Quality.OFF -> "Off"
-        },
+        imageQualityLabel = state.effectiveQualityLabel,
         dataSaver = state.dataSaver,
         onToggleAdBlock = vm.toggleAdBlock,
         onToggleEruda = vm.toggleEruda,
@@ -233,6 +245,7 @@ fun BrowserScreen(
         onImageQuality = { vm.closeOverlayMenu(); vm.openImageQualityPicker() },
         onFind = { vm.closeOverlayMenu(); vm.openFind() },
         onSearchEngine = { vm.closeOverlayMenu(); vm.openSearchEnginePicker() },
+        onMedia = { vm.closeOverlayMenu(); vm.openMediaPanel() },
         onHistory = { vm.closeOverlayMenu(); onOpenHistory() },
         onBookmarks = { vm.closeOverlayMenu(); onOpenBookmarks() },
         onDownloads = { vm.closeOverlayMenu(); onOpenDownloads() },
