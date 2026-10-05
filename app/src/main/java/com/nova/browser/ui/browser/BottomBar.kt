@@ -90,13 +90,14 @@ fun BottomBar(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            tabCount.toString(), color = Color.White,
-                            fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                            tabCount.toString(),
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
                         )
                     }
                 }
             }
-            // Long-press opens overlay menu
             Box(
                 modifier = Modifier
                     .size(48.dp)
