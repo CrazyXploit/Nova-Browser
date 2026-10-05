@@ -16,7 +16,6 @@ import com.nova.browser.data.DownloadManagerHelper
 import com.nova.browser.data.ErudaManager
 import com.nova.browser.data.HistoryDao
 import com.nova.browser.data.HistoryEntity
-import com.nova.browser.data.HttpsEnforcer
 import com.nova.browser.data.ImageQualityManager
 import com.nova.browser.data.MediaSniffer
 import com.nova.browser.data.MyIpFetcher
@@ -78,7 +77,6 @@ data class BrowserUiState(
     val imageQuality: ImageQualityManager.Quality = ImageQualityManager.Quality.HIGH,
     val effectiveQualityLabel: String = "High",
     val dataSaver: Boolean = false,
-    val httpsEnforced: Boolean = true,
     val trackersBlocked: Int = 0,
     val searchEngineId: String = "duckduckgo",
     val searchEngineName: String = "DuckDuckGo",
@@ -138,13 +136,11 @@ class BrowserViewModel @Inject constructor(
         false
     }
 
-    // === BACK NAVIGATION — go home, don't exit ===
     val goBackOrHome: () -> Unit = {
         val wv = webViewRef
         if (wv != null && wv.canGoBack()) {
             wv.goBack()
         } else {
-            // No history → go to home dashboard
             goHome()
         }
     }
@@ -176,37 +172,27 @@ class BrowserViewModel @Inject constructor(
     }
     val openFind: () -> Unit = { _state.update { it.copy(showInPageFind = true) } }
 
-    // === MEDIA PANEL ===
     val openMediaPanel: () -> Unit = {
         _state.update {
-            it.copy(
-                showMediaPanel = true,
-                mediaItems = MediaSniffer.list(),
-            )
+            it.copy(showMediaPanel = true, mediaItems = MediaSniffer.list())
         }
     }
     val closeMediaPanel: () -> Unit = { _state.update { it.copy(showMediaPanel = false) } }
 
     val playMedia: (MediaSniffer.MediaItem) -> Unit = { item ->
-        // Open media URL in WebView for playback
         val id = _state.value.activeTabId
         if (id != null) {
             viewModelScope.launch {
                 tabDao.upsert(
                     TabEntity(
-                        id = id, url = item.url,
-                        title = item.fileName,
-                        faviconUrl = null,
-                        lastActive = System.currentTimeMillis(),
+                        id = id, url = item.url, title = item.fileName,
+                        faviconUrl = null, lastActive = System.currentTimeMillis(),
                     )
                 )
                 _state.update {
                     it.copy(
-                        urlInput = item.url,
-                        isLoading = true,
-                        progress = 0,
-                        isHomeVisible = false,
-                        showMediaPanel = false,
+                        urlInput = item.url, isLoading = true, progress = 0,
+                        isHomeVisible = false, showMediaPanel = false,
                     )
                 }
             }
@@ -237,7 +223,6 @@ class BrowserViewModel @Inject constructor(
         val ctx = getApplication<Application>()
         UserAgentManager.load(ctx)
         ImageQualityManager.load(ctx)
-        HttpsEnforcer.load(ctx)
         SearchEngineManager.load(ctx)
         UsageStats.load(ctx)
 
@@ -248,7 +233,6 @@ class BrowserViewModel @Inject constructor(
                 imageQuality = ImageQualityManager.quality,
                 effectiveQualityLabel = ImageQualityManager.effectiveQualityLabel(),
                 dataSaver = ImageQualityManager.dataSaver,
-                httpsEnforced = HttpsEnforcer.enforceHttps,
                 searchEngineId = SearchEngineManager.currentId,
                 searchEngineName = SearchEngineManager.current.name,
             )
@@ -295,7 +279,6 @@ class BrowserViewModel @Inject constructor(
                 delay(2_000)
                 UsageStats.syncBlockedCounts()
                 syncStatsToState()
-                // Live sync media items if panel is open
                 if (_state.value.showMediaPanel) {
                     _state.update { it.copy(mediaItems = MediaSniffer.list()) }
                 }
@@ -366,19 +349,14 @@ class BrowserViewModel @Inject constructor(
                 MediaSniffer.reset()
                 tabDao.upsert(
                     TabEntity(
-                        id = id,
-                        url = HOME_PLACEHOLDER,
-                        title = "New Tab",
-                        faviconUrl = null,
-                        lastActive = System.currentTimeMillis(),
+                        id = id, url = HOME_PLACEHOLDER, title = "New Tab",
+                        faviconUrl = null, lastActive = System.currentTimeMillis(),
                     )
                 )
                 _state.update {
                     it.copy(
-                        urlInput = "",
-                        isHomeVisible = true,
-                        isLoading = false,
-                        progress = 0,
+                        urlInput = "", isHomeVisible = true,
+                        isLoading = false, progress = 0,
                     )
                 }
             }
@@ -390,21 +368,17 @@ class BrowserViewModel @Inject constructor(
         if (id != null && query.isNotBlank()) {
             viewModelScope.launch {
                 val normalized = UrlUtils.normalize(query)
-                val finalUrl = if (HttpsEnforcer.enforceHttps)
-                    HttpsEnforcer.upgrade(normalized) else normalized
                 tabDao.upsert(
                     TabEntity(
-                        id = id, url = finalUrl,
-                        title = UrlUtils.displayHost(finalUrl),
+                        id = id, url = normalized,
+                        title = UrlUtils.displayHost(normalized),
                         faviconUrl = null,
                         lastActive = System.currentTimeMillis(),
                     )
                 )
                 _state.update {
                     it.copy(
-                        urlInput = finalUrl,
-                        isLoading = true,
-                        progress = 0,
+                        urlInput = normalized, isLoading = true, progress = 0,
                         isHomeVisible = false,
                     )
                 }
@@ -433,24 +407,18 @@ class BrowserViewModel @Inject constructor(
         if (id != null && input.isNotBlank()) {
             viewModelScope.launch {
                 val normalized = UrlUtils.normalize(input)
-                val finalUrl = if (HttpsEnforcer.enforceHttps)
-                    HttpsEnforcer.upgrade(normalized) else normalized
                 tabDao.upsert(
                     TabEntity(
-                        id = id, url = finalUrl,
-                        title = UrlUtils.displayHost(finalUrl),
+                        id = id, url = normalized,
+                        title = UrlUtils.displayHost(normalized),
                         faviconUrl = null,
                         lastActive = System.currentTimeMillis(),
                     )
                 )
                 _state.update {
                     it.copy(
-                        urlInput = finalUrl,
-                        isLoading = true,
-                        progress = 0,
-                        showUrlPopup = false,
-                        urlMaximized = false,
-                        isHomeVisible = false,
+                        urlInput = normalized, isLoading = true, progress = 0,
+                        showUrlPopup = false, urlMaximized = false, isHomeVisible = false,
                     )
                 }
             }
@@ -490,8 +458,7 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
-    // ── Toggles ────────────────────────────────────────────
-    // FIX: When data saver is on, quality label shows Low
+    // ── Toggles (no HTTPS toggle) ──────────────────────────
     val setImageQuality: (ImageQualityManager.Quality) -> Unit = { q ->
         ImageQualityManager.updateQuality(q)
         ImageQualityManager.save(getApplication())
@@ -505,7 +472,6 @@ class BrowserViewModel @Inject constructor(
         reload()
     }
 
-    // FIX: Immediately sync effective quality label when data saver toggled
     val toggleDataSaver: () -> Unit = {
         val new = !ImageQualityManager.dataSaver
         ImageQualityManager.updateDataSaver(new)
@@ -517,12 +483,6 @@ class BrowserViewModel @Inject constructor(
             )
         }
         reload()
-    }
-
-    val toggleHttpsEnforcement: () -> Unit = {
-        HttpsEnforcer.enforceHttps = !HttpsEnforcer.enforceHttps
-        HttpsEnforcer.save(getApplication())
-        _state.update { it.copy(httpsEnforced = HttpsEnforcer.enforceHttps) }
     }
 
     val toggleAdBlock: () -> Unit = {
