@@ -2,6 +2,7 @@ package com.nova.browser.ui.browser
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.os.Build
 import android.webkit.CookieManager
 import android.webkit.DownloadListener
 import android.webkit.WebChromeClient
@@ -36,7 +37,6 @@ fun WebViewContainer(
 ) {
     val holder = remember { WebViewHolder() }
 
-    // Keep latest callbacks without re-triggering AndroidView update
     val currentOnPageStarted by rememberUpdatedState(onPageStarted)
     val currentOnProgress by rememberUpdatedState(onProgress)
     val currentOnPageFinished by rememberUpdatedState(onPageFinished)
@@ -46,6 +46,10 @@ fun WebViewContainer(
         modifier = Modifier.fillMaxSize(),
         factory = { ctx ->
             WebView(ctx).apply {
+                setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
+                isVerticalScrollBarEnabled = true
+                isHorizontalScrollBarEnabled = false
+
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
@@ -57,7 +61,19 @@ fun WebViewContainer(
                     mediaPlaybackRequiresUserGesture = false
                     useWideViewPort = true
                     loadWithOverviewMode = true
+
                     cacheMode = WebSettings.LOAD_DEFAULT
+                    allowFileAccess = false
+                    allowContentAccess = false
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        safeBrowsingEnabled = true
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        forceDark = WebSettings.FORCE_DARK_AUTO
+                    }
+
+                    mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                 }
 
                 if (isIncognito) {
@@ -125,14 +141,12 @@ fun WebViewContainer(
                 CookieManager.getInstance()
                     .setAcceptThirdPartyCookies(this, !isIncognito)
 
-                // Remember last loaded URL to prevent reload loops
                 tag = initialUrl
                 holder.webView = this
                 loadUrl(initialUrl)
             }
         },
         update = { wv ->
-            // Only reload when URL truly changed (compare with tag, not wv.url)
             val lastUrl = wv.tag as? String
             if (initialUrl.isNotBlank() &&
                 lastUrl != initialUrl &&
