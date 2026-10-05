@@ -19,7 +19,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
-fun BrowserScreen(vm: BrowserViewModel = hiltViewModel()) {
+fun BrowserScreen(
+    vm: BrowserViewModel = hiltViewModel(),
+    onOpenBookmarks: () -> Unit = {},
+    onOpenDownloads: () -> Unit = {},
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val history by vm.history.collectAsStateWithLifecycle()
 
@@ -27,7 +31,6 @@ fun BrowserScreen(vm: BrowserViewModel = hiltViewModel()) {
     var canGoBack by remember { mutableStateOf(false) }
     var canGoForward by remember { mutableStateOf(false) }
 
-    // Poll WebView history state on page changes
     LaunchedEffect(state.progress, state.activeTabId) {
         val wv = webViewRef.value
         canGoBack = wv?.canGoBack() == true
@@ -54,9 +57,10 @@ fun BrowserScreen(vm: BrowserViewModel = hiltViewModel()) {
                     loading = state.isLoading,
                     progress = state.progress,
                     isIncognito = state.isIncognito,
+                    isBookmarked = state.isCurrentUrlBookmarked,
                     onBarClick = vm.openSearchOverlay,
+                    onBookmarkClick = vm.toggleBookmark,
                     onMoreClick = vm.toggleMoreTools,
-                    onSettingsClick = { /* coming soon */ },
                     onTabsClick = vm.toggleTabSwitcher,
                     tabCount = state.tabs.size,
                 )
@@ -93,11 +97,11 @@ fun BrowserScreen(vm: BrowserViewModel = hiltViewModel()) {
                     onPageStarted = vm.onPageStarted,
                     onProgress = vm.onProgress,
                     onPageFinished = vm.onPageFinished,
+                    onDownloadStart = vm.onDownloadStart,
                 )
             }
         }
 
-        // Search overlay (full screen on top)
         if (state.showSearchOverlay) {
             SearchOverlay(
                 history = history,
@@ -109,7 +113,6 @@ fun BrowserScreen(vm: BrowserViewModel = hiltViewModel()) {
         }
     }
 
-    // Tab switcher
     if (state.showTabSwitcher) {
         TabSwitcherSheet(
             tabs = state.tabs,
@@ -121,15 +124,20 @@ fun BrowserScreen(vm: BrowserViewModel = hiltViewModel()) {
         )
     }
 
-    // More Tools
     if (state.showMoreTools) {
         MoreToolsSheet(
             adBlockEnabled = state.adBlockEnabled,
             isIncognito = state.isIncognito,
             onToggleAdBlock = vm.toggleAdBlock,
             onToggleIncognito = vm.toggleIncognito,
-            onBookmarks = { },
-            onHistory = { },
+            onBookmarks = {
+                vm.toggleMoreTools()
+                onOpenBookmarks()
+            },
+            onDownloads = {
+                vm.toggleMoreTools()
+                onOpenDownloads()
+            },
             onDismiss = vm.toggleMoreTools,
         )
     }
