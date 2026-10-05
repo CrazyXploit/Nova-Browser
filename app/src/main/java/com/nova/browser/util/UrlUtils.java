@@ -8,6 +8,7 @@ import java.net.URLEncoder;
 /**
  * Java utility for URL normalization — interop demo with Kotlin code.
  * Called from BrowserViewModel via UrlUtils.normalize(input).
+ * Uses Google as the default search engine.
  */
 public final class UrlUtils {
 
@@ -27,12 +28,12 @@ public final class UrlUtils {
 
         String q;
         try {
-            // Use the String-charset overload — works on ALL Android versions
+            // String overload — works on ALL Android versions
             q = URLEncoder.encode(trimmed, "UTF-8");
         } catch (UnsupportedEncodingException e) {
             q = trimmed;
         }
-        return "https://duckduckgo.com/?q=" + q;
+        return "https://www.google.com/search?q=" + q;
     }
 
     public static boolean isSecure(@NonNull String url) {
