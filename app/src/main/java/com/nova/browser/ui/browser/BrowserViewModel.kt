@@ -21,6 +21,7 @@ data class BrowserUiState(
     val tabs: List<TabEntity> = emptyList(),
     val activeTabId: String? = null,
     val urlInput: String = "",
+    val currentUrl: String = "",
     val isLoading: Boolean = false,
     val progress: Int = 0,
     val showTabSwitcher: Boolean = false,
@@ -54,7 +55,6 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
-    // ── Lambdas (clean from Compose) ──────────────────────
     val newTab: (String) -> Unit = { url -> viewModelScope.launch { createTab(url) } }
 
     val closeTab: (String) -> Unit = { id ->
@@ -62,23 +62,30 @@ class BrowserViewModel @Inject constructor(
             tabDao.delete(id)
             val remaining = _state.value.tabs.filterNot { it.id == id }
             if (_state.value.activeTabId == id) {
-                _state.update { it.copy(activeTabId = remaining.firstOrNull()?.id) }
+                val next = remaining.firstOrNull()
+                _state.update {
+                    it.copy(
+                        activeTabId = next?.id,
+                        currentUrl = next?.url ?: "",
+                        urlInput = next?.url ?: "",
+                    )
+                }
             }
         }
     }
 
     val selectTab: (String) -> Unit = { id ->
-        _state.update { s ->
-            s.copy(
+        val tab = _state.value.tabs.firstOrNull { it.id == id }
+        _state.update {
+            it.copy(
                 activeTabId = id,
-                urlInput = s.tabs.firstOrNull { it.id == id }?.url.orEmpty(),
+                urlInput = tab?.url.orEmpty(),
+                currentUrl = tab?.url.orEmpty(),
                 showTabSwitcher = false,
             )
         }
         viewModelScope.launch {
-            _state.value.tabs.firstOrNull { it.id == id }?.let {
-                tabDao.upsert(it.copy(lastActive = System.currentTimeMillis()))
-            }
+            tab?.let { tabDao.upsert(it.copy(lastActive = System.currentTimeMillis())) }
         }
     }
 
@@ -90,7 +97,6 @@ class BrowserViewModel @Inject constructor(
         _state.update { it.copy(urlInput = input) }
     }
 
-    // ☕ Uses Java util for URL normalization
     val navigate: (String) -> Unit = { input ->
         val id = _state.value.activeTabId
         if (id != null) {
@@ -105,30 +111,52 @@ class BrowserViewModel @Inject constructor(
                         lastActive = System.currentTimeMillis(),
                     )
                 )
-                _state.update { it.copy(urlInput = normalized, isLoading = true, progress = 0) }
+                _state.update {
+                    it.copy(
+                        urlInput = normalized,
+                        currentUrl = normalized,
+                        isLoading = true,
+                        progress = 0,
+                    )
+                }
             }
         }
     }
 
-    val onPageStarted: () -> Unit = { _state.update { it.copy(isLoading = true, progress = 0) } }
+    val onPageStarted: () -> Unit = {
+        _state.update { it.copy(isLoading = true) }
+    }
 
-    val onProgress: (Int) -> Unit = { p -> _state.update { it.copy(progress = p) } }
+    val onProgress: (Int) -> Unit = { p ->
+        _state.update { it.copy(progress = p) }
+    }
 
+    // IMPORTANT: no longer update urlInput here → stops reload loop
     val onPageFinished: (String, String, String?) -> Unit = { url, title, favicon ->
         viewModelScope.launch {
             val id = _state.value.activeTabId
             if (id != null) {
-                tabDao.upsert(
-                    TabEntity(
-                        id = id,
-                        url = url,
-                        title = title.ifBlank { UrlUtils.displayHost(url) },
-                        faviconUrl = favicon,
-                        lastActive = System.currentTimeMillis(),
+                val existing = _state.value.tabs.firstOrNull { it.id == id }
+                // Only update if URL or title actually changed
+                if (existing?.url != url || existing.title != title) {
+                    tabDao.upsert(
+                        TabEntity(
+                            id = id,
+                            url = url,
+                            title = title.ifBlank { UrlUtils.displayHost(url) },
+                            faviconUrl = favicon,
+                            lastActive = existing?.lastActive ?: System.currentTimeMillis(),
+                        )
                     )
-                )
-                historyDao.insert(HistoryEntity(url = url, title = title))
-                _state.update { it.copy(isLoading = false, progress = 100, urlInput = url) }
+                    historyDao.insert(HistoryEntity(url = url, title = title))
+                }
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        progress = 100,
+                        currentUrl = url,
+                    )
+                }
             }
         }
     }
@@ -136,6 +164,12 @@ class BrowserViewModel @Inject constructor(
     private suspend fun createTab(url: String) {
         val id = UUID.randomUUID().toString()
         tabDao.upsert(TabEntity(id, url, "New Tab", null, System.currentTimeMillis()))
-        _state.update { it.copy(activeTabId = id, urlInput = url) }
+        _state.update {
+            it.copy(
+                activeTabId = id,
+                urlInput = url,
+                currentUrl = url,
+            )
+        }
     }
 }
