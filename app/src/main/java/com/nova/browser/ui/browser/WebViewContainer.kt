@@ -7,11 +7,13 @@ import android.webkit.DownloadListener
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -55,14 +57,12 @@ fun WebViewContainer(
                     mediaPlaybackRequiresUserGesture = false
                     useWideViewPort = true
                     loadWithOverviewMode = true
-                    // Perf: don't block UI on layout
-                    cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
-                    // Perf: prefer hardware rendering
-                    setRenderPriority(android.webkit.WebSettings.RenderPriority.HIGH)
+                    cacheMode = WebSettings.LOAD_DEFAULT
                 }
 
                 if (isIncognito) {
-                    userAgentString = "$userAgentString NovaIncognito/1.0"
+                    val baseUa = settings.userAgentString ?: ""
+                    settings.userAgentString = "$baseUa NovaIncognito/1.0"
                 }
 
                 webViewClient = object : WebViewClient() {
@@ -111,12 +111,19 @@ fun WebViewContainer(
 
                 setDownloadListener(
                     DownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
-                        currentOnDownloadStart(url, userAgent, contentDisposition, mimeType, contentLength)
+                        currentOnDownloadStart(
+                            url,
+                            userAgent,
+                            contentDisposition,
+                            mimeType,
+                            contentLength,
+                        )
                     }
                 )
 
                 CookieManager.getInstance().setAcceptCookie(true)
-                CookieManager.getInstance().setAcceptThirdPartyCookies(this, !isIncognito)
+                CookieManager.getInstance()
+                    .setAcceptThirdPartyCookies(this, !isIncognito)
 
                 // Remember last loaded URL to prevent reload loops
                 tag = initialUrl
