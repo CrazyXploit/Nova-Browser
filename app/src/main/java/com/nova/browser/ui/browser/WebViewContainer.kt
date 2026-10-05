@@ -11,7 +11,9 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.nova.browser.data.AdBlocker
@@ -32,6 +34,12 @@ fun WebViewContainer(
 ) {
     val holder = remember { WebViewHolder() }
 
+    // Keep latest callbacks without re-triggering AndroidView update
+    val currentOnPageStarted by rememberUpdatedState(onPageStarted)
+    val currentOnProgress by rememberUpdatedState(onProgress)
+    val currentOnPageFinished by rememberUpdatedState(onPageFinished)
+    val currentOnDownloadStart by rememberUpdatedState(onDownloadStart)
+
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { ctx ->
@@ -47,9 +55,14 @@ fun WebViewContainer(
                     mediaPlaybackRequiresUserGesture = false
                     useWideViewPort = true
                     loadWithOverviewMode = true
-                    if (isIncognito) {
-                        userAgentString = "$userAgentString NovaIncognito/1.0"
-                    }
+                    // Perf: don't block UI on layout
+                    cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+                    // Perf: prefer hardware rendering
+                    setRenderPriority(android.webkit.WebSettings.RenderPriority.HIGH)
+                }
+
+                if (isIncognito) {
+                    userAgentString = "$userAgentString NovaIncognito/1.0"
                 }
 
                 webViewClient = object : WebViewClient() {
@@ -69,20 +82,20 @@ fun WebViewContainer(
                         url: String?,
                         favicon: Bitmap?,
                     ) {
-                        onPageStarted()
+                        currentOnPageStarted()
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
-                        // Try to grab the favicon URL from the page
                         val faviconUrl = url?.let { pageUrl ->
                             try {
                                 val uri = java.net.URI(pageUrl)
-                                "${uri.scheme}://${uri.host}/favicon.ico"
+                                val host = uri.host ?: return@let null
+                                "${uri.scheme ?: "https"}://$host/favicon.ico"
                             } catch (_: Exception) {
                                 null
                             }
                         }
-                        onPageFinished(
+                        currentOnPageFinished(
                             url ?: "",
                             view?.title ?: "",
                             faviconUrl,
@@ -92,41 +105,48 @@ fun WebViewContainer(
 
                 webChromeClient = object : WebChromeClient() {
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                        onProgress(newProgress)
-                    }
-
-                    override fun onReceivedIcon(view: WebView?, icon: Bitmap?) {
-                        // Real favicon received
-                        view?.url?.let { pageUrl ->
-                            val uri = try { java.net.URI(pageUrl) } catch (_: Exception) { null }
-                            if (uri != null) {
-                                val faviconUrl = "${uri.scheme}://${uri.host}/favicon.ico"
-                                onPageFinished(pageUrl, view.title ?: "", faviconUrl)
-                            }
-                        }
+                        currentOnProgress(newProgress)
                     }
                 }
 
-                setDownloadListener(DownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
-                    onDownloadStart(url, userAgent, contentDisposition, mimeType, contentLength)
-                })
+                setDownloadListener(
+                    DownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+                        currentOnDownloadStart(url, userAgent, contentDisposition, mimeType, contentLength)
+                    }
+                )
 
                 CookieManager.getInstance().setAcceptCookie(true)
                 CookieManager.getInstance().setAcceptThirdPartyCookies(this, !isIncognito)
 
+                // Remember last loaded URL to prevent reload loops
+                tag = initialUrl
                 holder.webView = this
                 loadUrl(initialUrl)
             }
         },
         update = { wv ->
-            val current = wv.url ?: ""
+            // Only reload when URL truly changed (compare with tag, not wv.url)
+            val lastUrl = wv.tag as? String
             if (initialUrl.isNotBlank() &&
-                current != initialUrl &&
+                lastUrl != initialUrl &&
                 !initialUrl.startsWith("about:") &&
                 !initialUrl.startsWith("data:")
             ) {
+                wv.tag = initialUrl
                 wv.loadUrl(initialUrl)
             }
         },
+        onRelease = { wv ->
+            wv.stopLoading()
+            wv.loadUrl("about:blank")
+            wv.destroy()
+            holder.webView = null
+        },
     )
+
+    DisposableEffect(Unit) {
+        onDispose {
+            holder.webView?.stopLoading()
+        }
+    }
 }
