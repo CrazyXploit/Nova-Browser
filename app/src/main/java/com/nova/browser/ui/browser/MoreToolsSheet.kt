@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Download
@@ -36,8 +37,10 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun MoreToolsSheet(
     adBlockEnabled: Boolean,
+    erudaEnabled: Boolean,
     isIncognito: Boolean,
     onToggleAdBlock: () -> Unit,
+    onToggleEruda: () -> Unit,
     onToggleIncognito: () -> Unit,
     onBookmarks: () -> Unit,
     onDownloads: () -> Unit,
@@ -69,6 +72,14 @@ fun MoreToolsSheet(
                 subtitle = if (adBlockEnabled) "Enabled" else "Disabled",
                 checked = adBlockEnabled,
                 onToggle = onToggleAdBlock,
+            )
+
+            ToggleRow(
+                icon = Icons.Default.Code,
+                title = "Eruda DevTools",
+                subtitle = if (erudaEnabled) "On — console on every page" else "Off",
+                checked = erudaEnabled,
+                onToggle = onToggleEruda,
             )
 
             ToggleRow(
