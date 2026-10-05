@@ -1,10 +1,15 @@
 package com.nova.browser.ui.browser
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.net.Uri
+import android.os.Environment
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nova.browser.data.AdBlocker
 import com.nova.browser.data.BookmarkDao
 import com.nova.browser.data.BookmarkEntity
+import com.nova.browser.data.DownloadDao
+import com.nova.browser.data.DownloadEntity
 import com.nova.browser.data.HistoryDao
 import com.nova.browser.data.HistoryEntity
 import com.nova.browser.data.TabDao
@@ -19,6 +24,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 
@@ -33,16 +39,19 @@ data class BrowserUiState(
     val showMoreTools: Boolean = false,
     val isIncognito: Boolean = false,
     val adBlockEnabled: Boolean = true,
+    val isCurrentUrlBookmarked: Boolean = false,
 ) {
     val activeTab: TabEntity? get() = tabs.firstOrNull { it.id == activeTabId }
 }
 
 @HiltViewModel
 class BrowserViewModel @Inject constructor(
+    application: Application,
     private val tabDao: TabDao,
     private val historyDao: HistoryDao,
     private val bookmarkDao: BookmarkDao,
-) : ViewModel() {
+    private val downloadDao: DownloadDao,
+) : AndroidViewModel(application) {
 
     private val _state = MutableStateFlow(BrowserUiState())
     val state: StateFlow<BrowserUiState> = _state.asStateFlow()
@@ -53,9 +62,11 @@ class BrowserViewModel @Inject constructor(
     val bookmarks: StateFlow<List<BookmarkEntity>> = bookmarkDao.observeAll()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val downloads: StateFlow<List<DownloadEntity>> = downloadDao.observeAll()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     init {
         AdBlocker.enabled = true
-
         viewModelScope.launch {
             tabDao.observeAll().collect { tabs ->
                 val current = _state.value
@@ -182,37 +193,53 @@ class BrowserViewModel @Inject constructor(
             val id = _state.value.activeTabId
             if (id != null) {
                 val existing = _state.value.tabs.firstOrNull { it.id == id }
-                if (existing?.url != url || existing.title != title) {
+                val newFavicon = favicon ?: existing?.faviconUrl
+                if (existing?.url != url || existing.title != title || existing.faviconUrl != newFavicon) {
                     tabDao.upsert(
                         TabEntity(
                             id = id,
                             url = url,
                             title = title.ifBlank { UrlUtils.displayHost(url) },
-                            faviconUrl = favicon,
+                            faviconUrl = newFavicon,
                             lastActive = existing?.lastActive ?: System.currentTimeMillis(),
+                            isIncognito = _state.value.isIncognito,
                         )
                     )
                     if (!_state.value.isIncognito) {
                         historyDao.insert(HistoryEntity(url = url, title = title))
                     }
                 }
+
+                // Check bookmark state
+                val bm = bookmarkDao.findByUrl(url)
                 _state.update {
-                    it.copy(isLoading = false, progress = 100)
+                    it.copy(
+                        isLoading = false,
+                        progress = 100,
+                        isCurrentUrlBookmarked = bm != null,
+                    )
                 }
             }
         }
     }
 
     // ── Bookmarks ──────────────────────────────────────────
-    val addBookmark: () -> Unit = {
+    val toggleBookmark: () -> Unit = {
         viewModelScope.launch {
             val tab = _state.value.activeTab ?: return@launch
-            bookmarkDao.insert(
-                BookmarkEntity(
-                    url = tab.url,
-                    title = tab.title.ifBlank { UrlUtils.displayHost(tab.url) },
+            val existing = bookmarkDao.findByUrl(tab.url)
+            if (existing != null) {
+                bookmarkDao.delete(existing.id)
+                _state.update { it.copy(isCurrentUrlBookmarked = false) }
+            } else {
+                bookmarkDao.insert(
+                    BookmarkEntity(
+                        url = tab.url,
+                        title = tab.title.ifBlank { UrlUtils.displayHost(tab.url) },
+                    )
                 )
-            )
+                _state.update { it.copy(isCurrentUrlBookmarked = true) }
+            }
         }
     }
 
@@ -223,6 +250,35 @@ class BrowserViewModel @Inject constructor(
     // ── History ────────────────────────────────────────────
     val clearHistory: () -> Unit = {
         viewModelScope.launch { historyDao.clear() }
+    }
+
+    // ── Downloads ──────────────────────────────────────────
+    val onDownloadStart: (String, String?, String?, String?, Long) -> Unit =
+        { url, userAgent, contentDisposition, mimeType, contentLength ->
+            viewModelScope.launch {
+                val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
+                downloadDao.insert(
+                    DownloadEntity(
+                        url = url,
+                        fileName = fileName,
+                        mimeType = mimeType,
+                        contentLength = contentLength,
+                        status = "QUEUED",
+                    )
+                )
+                val ctx = getApplication<Application>()
+                com.nova.browser.data.DownloadManagerHelper.enqueue(
+                    context = ctx,
+                    url = url,
+                    userAgent = userAgent,
+                    contentDisposition = contentDisposition,
+                    mimeType = mimeType,
+                )
+            }
+        }
+
+    val removeDownload: (Long) -> Unit = { id ->
+        viewModelScope.launch { downloadDao.delete(id) }
     }
 
     private suspend fun createTab(url: String) {
