@@ -1,5 +1,7 @@
 package com.nova.browser.ui.downloads
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -49,9 +52,7 @@ fun DownloadsScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = {
-                    Text("Downloads", fontWeight = FontWeight.SemiBold)
-                },
+                title = { Text("Downloads", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, "Back")
@@ -65,11 +66,7 @@ fun DownloadsScreen(
             )
         },
     ) { padding ->
-        Box(
-            Modifier
-                .padding(padding)
-                .fillMaxSize()
-        ) {
+        Box(Modifier.padding(padding).fillMaxSize()) {
             if (downloads.isEmpty()) {
                 EmptyState()
             } else {
@@ -78,19 +75,19 @@ fun DownloadsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                                .clickable { vm.openDownload(dl.id) }
+                                .padding(horizontal = 20.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
-                                Icons.Default.Download,
-                                contentDescription = null,
+                                Icons.Default.Download, null,
                                 modifier = Modifier.size(20.dp),
                                 tint = MaterialTheme.colorScheme.primary,
                             )
                             Spacer(Modifier.width(14.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    text = dl.fileName,
+                                    dl.fileName,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Medium,
@@ -98,9 +95,19 @@ fun DownloadsScreen(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
-                                    text = dl.status,
+                                    dl.status + " · " + formatBytes(dl.contentLength),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 12.sp,
+                                )
+                            }
+                            IconButton(
+                                onClick = { vm.openDownload(dl.id) },
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.OpenInNew, "Open",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             IconButton(
@@ -108,8 +115,7 @@ fun DownloadsScreen(
                                 modifier = Modifier.size(36.dp),
                             ) {
                                 Icon(
-                                    Icons.Default.Delete,
-                                    "Delete",
+                                    Icons.Default.Delete, "Delete",
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -126,19 +132,26 @@ fun DownloadsScreen(
     }
 }
 
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0) return "unknown size"
+    val kb = bytes / 1024.0
+    val mb = kb / 1024.0
+    return when {
+        mb >= 1 -> "%.1f MB".format(mb)
+        kb >= 1 -> "%.0f KB".format(kb)
+        else -> "$bytes B"
+    }
+}
+
 @Composable
 private fun EmptyState() {
-    Box(
-        Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Icon(
-                Icons.Default.Download,
-                contentDescription = null,
+                Icons.Default.Download, null,
                 modifier = Modifier.size(48.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
