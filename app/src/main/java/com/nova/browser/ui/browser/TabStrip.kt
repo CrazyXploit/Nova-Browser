@@ -1,7 +1,7 @@
 package com.nova.browser.ui.browser
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -54,8 +54,7 @@ fun TabStrip(
         exit = shrinkVertically() + fadeOut(),
     ) {
         LazyRow(
-            modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(horizontal = 4.dp),
         ) {
