@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nova.browser.data.AdBlocker
@@ -38,7 +37,7 @@ import javax.inject.Inject
 private const val HOME_URL = "https://www.google.com"
 
 data class LongPressTarget(
-    val type: String,       // "link", "image", "text", "phone", "email"
+    val type: String,
     val url: String,
     val extra: String = "",
 )
@@ -104,7 +103,6 @@ class BrowserViewModel @Inject constructor(
 
     fun attachWebView(wv: android.webkit.WebView) {
         webViewRef = wv
-        // Long-press handler
         wv.setOnLongClickListener {
             val result = wv.hitTestResult
             val extra = result.extra ?: ""
@@ -134,13 +132,11 @@ class BrowserViewModel @Inject constructor(
     val canGoBack: () -> Boolean = { webViewRef?.canGoBack() == true }
     val canGoForward: () -> Boolean = { webViewRef?.canGoForward() == true }
 
-    // Find in page
     val findText: (String) -> Unit = { query ->
-        val wv = webViewRef
-        if (wv != null) {
+        webViewRef?.let { wv ->
             wv.findAllAsync(query)
             wv.findNext(true)
-            _state.update { it.copy(findQuery = query) }
+            _state.update { it.copy(findQuery = query, findCurrentMatch = 1) }
         }
     }
     val findNext: () -> Unit = {
@@ -314,8 +310,9 @@ class BrowserViewModel @Inject constructor(
         _state.update { it.copy(longPressTarget = null) }
     }
 
+    // FIX: use updateQuality/updateDataSaver (renamed)
     val setImageQuality: (ImageQualityManager.Quality) -> Unit = { q ->
-        ImageQualityManager.setQuality(q)
+        ImageQualityManager.updateQuality(q)
         ImageQualityManager.save(getApplication())
         _state.update { it.copy(imageQuality = q, showImageQualityPicker = false) }
         reload()
@@ -323,7 +320,7 @@ class BrowserViewModel @Inject constructor(
 
     val toggleDataSaver: () -> Unit = {
         val new = !ImageQualityManager.dataSaver
-        ImageQualityManager.setDataSaver(new)
+        ImageQualityManager.updateDataSaver(new)
         ImageQualityManager.save(getApplication())
         _state.update { it.copy(dataSaver = new) }
         reload()
