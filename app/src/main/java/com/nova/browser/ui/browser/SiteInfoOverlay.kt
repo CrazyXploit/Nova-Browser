@@ -7,9 +7,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,9 +42,11 @@ import com.nova.browser.data.SiteInfo
 @Composable
 fun SiteInfoOverlay(
     url: String,
+    trackersBlocked: Int,
     onDismiss: () -> Unit,
 ) {
     val info = SiteInfo.analyze(url)
+    val navBarPadding = WindowInsets.navigationBars.asPaddingValues()
 
     Box(
         modifier = Modifier
@@ -53,6 +58,7 @@ fun SiteInfoOverlay(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(bottom = navBarPadding.calculateBottomPadding())
                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .clickable { }
@@ -64,7 +70,7 @@ fun SiteInfoOverlay(
                     if (info.isSecure) Icons.Default.Shield else Icons.Default.Language,
                     null,
                     tint = if (info.isSecure) Color(0xFF34D399)
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    else MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(28.dp),
                 )
                 Spacer(Modifier.width(12.dp))
@@ -76,7 +82,7 @@ fun SiteInfoOverlay(
                         fontSize = 16.sp,
                     )
                     Text(
-                        info.host,
+                        info.host.ifBlank { "unknown" },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                     )
@@ -88,73 +94,94 @@ fun SiteInfoOverlay(
 
             Spacer(Modifier.height(20.dp))
 
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.Shield, null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "$trackersBlocked trackers & ads blocked",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                    )
+                    Text(
+                        "On this page",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Section("URL Details")
             InfoRow("Scheme", info.scheme)
             InfoRow("Host", info.host)
             InfoRow("Port", info.port)
             InfoRow("Path", info.path)
             if (info.query.isNotBlank()) InfoRow("Query", info.query)
-            InfoRow("TLD", "." + info.tld)
-            InfoRow("Localhost", if (info.isLocalhost) "Yes" else "No")
-            InfoRow("Secure (HTTPS)", if (info.isSecure) "Yes ✓" else "No ✗")
-            InfoRow("Domain type", info.domainAgeHint)
+            InfoRow("TLD", if (info.tld.isNotBlank()) ".${info.tld}" else "—")
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(16.dp))
 
+            Section("Security")
+            CheckRow("Encrypted (HTTPS)", info.isSecure)
+            CheckRow("Localhost", !info.isLocalhost)
+            CheckRow("Known domain type", info.domainAgeHint.isNotBlank())
+
+            Spacer(Modifier.height(16.dp))
+
+            Section("Domain Type")
             Text(
-                "Cookies",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "Cookie manager active for this session. " +
-                    "Third-party cookies ${if (info.isSecure) "allowed" else "blocked"}.",
+                info.domainAgeHint,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
             )
 
-            Spacer(Modifier.height(20.dp))
-
-            Text(
-                "Security",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-            )
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Check,
-                    null,
-                    tint = Color(0xFF34D399),
-                    modifier = Modifier.size(14.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "Mixed content allowed (some sites need it)",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Check,
-                    null,
-                    tint = Color(0xFF34D399),
-                    modifier = Modifier.size(14.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "Safe browsing disabled for performance",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                )
-            }
-
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+@Composable
+private fun Section(title: String) {
+    Text(
+        title,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 12.sp,
+        modifier = Modifier.padding(bottom = 8.dp),
+    )
+}
+
+@Composable
+private fun CheckRow(label: String, ok: Boolean) {
+    Row(
+        modifier = Modifier.padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Default.Check, null,
+            tint = if (ok) Color(0xFF34D399) else MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+        )
     }
 }
 
@@ -171,7 +198,7 @@ private fun InfoRow(label: String, value: String) {
             label,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 13.sp,
-            modifier = Modifier.width(130.dp),
+            modifier = Modifier.width(120.dp),
         )
         Text(
             value.ifBlank { "—" },
