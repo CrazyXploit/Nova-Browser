@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -53,6 +54,8 @@ fun UrlBar(
     tabCount: Int,
 ) {
     val isSecure = url.startsWith("https")
+    val isHome = url.isBlank()
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -74,6 +77,7 @@ fun UrlBar(
                         imageVector = Icons.Default.Shield,
                         contentDescription = "Site info",
                         tint = if (isSecure) Color(0xFF34D399)
+                        else if (isHome) MaterialTheme.colorScheme.onSurfaceVariant
                         else MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(20.dp),
                     )
@@ -110,14 +114,15 @@ fun UrlBar(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Default.Language, null,
+                        if (isHome) Icons.Default.Search else Icons.Default.Language,
+                        null,
                         modifier = Modifier.size(13.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = url.ifBlank { "Search Google or type URL" },
-                        color = if (url.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
+                        text = if (isHome) "Search or type URL" else url,
+                        color = if (isHome) MaterialTheme.colorScheme.onSurfaceVariant
                         else MaterialTheme.colorScheme.onSurface,
                         fontSize = 13.sp,
                         maxLines = 1,
@@ -144,12 +149,17 @@ fun UrlBar(
                 )
             }
 
-            IconButton(onClick = onBookmarkClick, modifier = Modifier.size(36.dp)) {
+            IconButton(
+                onClick = onBookmarkClick,
+                enabled = !isHome,
+                modifier = Modifier.size(36.dp),
+            ) {
                 Icon(
                     imageVector = if (isBookmarked) Icons.Default.Bookmark
                     else Icons.Default.BookmarkBorder,
                     contentDescription = "Bookmark",
-                    tint = if (isBookmarked) MaterialTheme.colorScheme.primary
+                    tint = if (isHome) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    else if (isBookmarked) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(20.dp),
                 )
