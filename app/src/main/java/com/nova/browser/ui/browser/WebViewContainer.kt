@@ -140,9 +140,14 @@ fun WebViewContainer(
                             return AdBlocker.blockedResponse()
                         }
 
+                        // === MEDIA SNIFF with content-length + type ===
                         if (request.method == "GET") {
-                            val ct = request.requestHeaders["Content-Type"]
-                            MediaSniffer.sniff(uri.toString(), ct, 0L)
+                            val headers = request.requestHeaders ?: emptyMap()
+                            val ct = headers["Accept"]?.let { null } ?: null
+
+                            // WebResourceRequest doesn't expose response headers — we sniff URL + hint CT
+                            val hinted = guessContentType(uri.toString())
+                            MediaSniffer.sniff(uri.toString(), hinted, 0L)
                         }
 
                         if (ImageQualityManager.shouldBlockImages()) {
@@ -175,6 +180,9 @@ fun WebViewContainer(
                             } catch (_: Exception) { }
                         }
 
+                        // Probe media metadata in page
+                        if (view != null) injectMediaProbe(view)
+
                         val faviconUrl = url?.let { pageUrl ->
                             try {
                                 val uri = java.net.URI(pageUrl)
@@ -192,6 +200,10 @@ fun WebViewContainer(
                     }
                     override fun onConsoleMessage(c: ConsoleMessage?): Boolean {
                         val msg = c?.message() ?: ""
+                        if (msg.startsWith("NOVA_MEDIA:")) {
+                            parseMediaProbe(msg.removePrefix("NOVA_MEDIA:"))
+                            return true
+                        }
                         if (msg.contains("Nova:") || msg.contains("Eruda")) {
                             Log.d(TAG, "[Nova] $msg")
                         }
@@ -206,7 +218,8 @@ fun WebViewContainer(
                 )
 
                 CookieManager.getInstance().setAcceptCookie(true)
-                CookieManager.getInstance().setAcceptThirdPartyCookies(this, !isIncognito)
+                CookieManager.getInstance()
+                    .setAcceptThirdPartyCookies(this, !isIncognito)
 
                 tag = initialUrl
                 holder.webView = this
@@ -246,9 +259,144 @@ fun WebViewContainer(
     }
 }
 
+private fun guessContentType(url: String): String? {
+    val lower = url.lowercase()
+    return when {
+        lower.endsWith(".mp4") -> "video/mp4"
+        lower.endsWith(".webm") -> "video/webm"
+        lower.endsWith(".mkv") -> "video/x-matroska"
+        lower.endsWith(".mov") -> "video/quicktime"
+        lower.endsWith(".m3u8") -> "application/vnd.apple.mpegurl"
+        lower.endsWith(".mpd") -> "application/dash+xml"
+        lower.endsWith(".mp3") -> "audio/mpeg"
+        lower.endsWith(".m4a") -> "audio/mp4"
+        lower.endsWith(".ogg") -> "audio/ogg"
+        lower.endsWith(".wav") -> "audio/wav"
+        lower.endsWith(".flac") -> "audio/flac"
+        lower.endsWith(".gif") -> "image/gif"
+        lower.endsWith(".png") -> "image/png"
+        lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
+        lower.endsWith(".webp") -> "image/webp"
+        lower.endsWith(".svg") -> "image/svg+xml"
+        lower.endsWith(".avif") -> "image/avif"
+        lower.endsWith(".pdf") -> "application/pdf"
+        else -> null
+    }
+}
+
 private fun injectEruda(view: WebView?) {
     if (view == null) return
     try {
         view.evaluateJavascript(ErudaManager.buildInitScript(), null)
     } catch (_: Exception) { }
+}
+
+/**
+ * Probes DOM for <video>, <audio>, <img> sizes/durations + Content-Length via fetch HEAD.
+ * Emits NOVA_MEDIA:<json> messages we parse in onConsoleMessage.
+ */
+private fun injectMediaProbe(view: WebView) {
+    val js = """
+        (function() {
+            if (window.__novaMediaProbe) return;
+            window.__novaMediaProbe = true;
+
+            function fmt(ms) { return Math.floor(ms); }
+
+            function probeVideo(v) {
+                try {
+                    var src = v.currentSrc || v.src;
+                    if (!src) return;
+                    var duration = isFinite(v.duration) ? fmt(v.duration * 1000) : 0;
+                    var w = v.videoWidth || 0;
+                    var h = v.videoHeight || 0;
+                    console.log('NOVA_MEDIA:' + JSON.stringify({
+                        url: src, durationMs: duration, width: w, height: h
+                    }));
+                } catch(e) {}
+            }
+
+            function probeAudio(a) {
+                try {
+                    var src = a.currentSrc || a.src;
+                    if (!src) return;
+                    var duration = isFinite(a.duration) ? fmt(a.duration * 1000) : 0;
+                    console.log('NOVA_MEDIA:' + JSON.stringify({
+                        url: src, durationMs: duration, width: 0, height: 0
+                    }));
+                } catch(e) {}
+            }
+
+            function probeImage(img) {
+                try {
+                    var src = img.currentSrc || img.src;
+                    if (!src) return;
+                    var w = img.naturalWidth || 0;
+                    var h = img.naturalHeight || 0;
+                    if (w === 0) return;
+                    console.log('NOVA_MEDIA:' + JSON.stringify({
+                        url: src, durationMs: 0, width: w, height: h
+                    }));
+                } catch(e) {}
+            }
+
+            function probeAll() {
+                try {
+                    document.querySelectorAll('video').forEach(probeVideo);
+                    document.querySelectorAll('audio').forEach(probeAudio);
+                    document.querySelectorAll('img').forEach(probeImage);
+                } catch(e) {}
+            }
+
+            // Initial scan
+            probeAll();
+
+            // Watch for dynamic media
+            try {
+                var obs = new MutationObserver(function() {
+                    probeAll();
+                });
+                obs.observe(document.documentElement, { childList: true, subtree: true });
+            } catch(e) {}
+        })();
+    """.trimIndent()
+
+    try {
+        view.evaluateJavascript(js, null)
+    } catch (_: Exception) { }
+}
+
+private fun parseMediaProbe(json: String) {
+    try {
+        val trimmed = json.trim()
+        if (!trimmed.startsWith("{")) return
+
+        val url = extractString(trimmed, "url") ?: return
+        val durationMs = extractLong(trimmed, "durationMs") ?: 0L
+        val width = extractInt(trimmed, "width") ?: 0
+        val height = extractInt(trimmed, "height") ?: 0
+
+        MediaSniffer.updateMetadata(
+            url = url,
+            durationMs = durationMs,
+            widthPx = width,
+            heightPx = height,
+        )
+    } catch (_: Exception) { }
+}
+
+// Tiny JSON extractors — avoid pulling in a parser just for this
+private fun extractString(json: String, key: String): String? {
+    val pattern = "\"$key\"\\s*:\\s*\"([^\"]*)\"".toRegex()
+    return pattern.find(json)?.groupValues?.get(1)
+}
+
+private fun extractLong(json: String, key: String): Long? {
+    val pattern = "\"$key\"\\s*:\\s*(-?\\d+)".toRegex()
+    return pattern.find(json)?.groupValues?.get(1)?.toLongOrNull()
+}
+
+private fun extractInt(json: String, key: String): Int? {
+    val pattern = "\"$key\"\\s*:\\s*(-?\\d+)".toRegex()
+    return pattern.find(json)?.groupValues?.get(1)?.toIntOrNull()
 }
