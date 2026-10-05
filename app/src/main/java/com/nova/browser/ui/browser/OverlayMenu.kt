@@ -31,8 +31,11 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -55,12 +58,18 @@ fun OverlayMenu(
     erudaEnabled: Boolean,
     desktopMode: Boolean,
     isIncognito: Boolean,
+    httpsEnforced: Boolean,
+    imageQualityLabel: String,
+    dataSaver: Boolean,
     onToggleAdBlock: () -> Unit,
     onToggleEruda: () -> Unit,
     onToggleDesktop: () -> Unit,
     onToggleIncognito: () -> Unit,
+    onToggleHttps: () -> Unit,
     onUserAgent: () -> Unit,
     onMyIp: () -> Unit,
+    onImageQuality: () -> Unit,
+    onFind: () -> Unit,
     onHistory: () -> Unit,
     onBookmarks: () -> Unit,
     onDownloads: () -> Unit,
@@ -90,7 +99,7 @@ fun OverlayMenu(
                         end = 16.dp,
                     )
                     .width(menuWidth)
-                    .heightIn(max = 520.dp)
+                    .heightIn(max = 580.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(MaterialTheme.colorScheme.surface)
                     .clickable { /* consume */ }
@@ -107,16 +116,24 @@ fun OverlayMenu(
 
                 ToggleItem(Icons.Default.Block, "Ad Blocker", adBlockEnabled, onToggleAdBlock)
                 ToggleItem(Icons.Default.Code, "Eruda DevTools", erudaEnabled, onToggleEruda)
+                ToggleItem(Icons.Default.Lock, "Force HTTPS", httpsEnforced, onToggleHttps)
                 ToggleItem(Icons.Default.Devices, "Desktop Mode", desktopMode, onToggleDesktop)
                 ToggleItem(Icons.Default.Visibility, "Incognito", isIncognito, onToggleIncognito)
 
                 Spacer(Modifier.size(4.dp))
 
-                ActionItem(Icons.Default.History, "History", onHistory)
-                ActionItem(Icons.Default.Bookmark, "Bookmarks", onBookmarks)
-                ActionItem(Icons.Default.Download, "Downloads", onDownloads)
-                ActionItem(Icons.Default.Language, "User Agent", onUserAgent)
-                ActionItem(Icons.Default.Public, "My IP Address", onMyIp)
+                ActionItem(
+                    Icons.Default.Image,
+                    "Image Quality",
+                    "$imageQualityLabel${if (dataSaver) " · Data Saver" else ""}",
+                    onImageQuality,
+                )
+                ActionItem(Icons.Default.Search, "Find in page", null, onFind)
+                ActionItem(Icons.Default.History, "History", null, onHistory)
+                ActionItem(Icons.Default.Bookmark, "Bookmarks", null, onBookmarks)
+                ActionItem(Icons.Default.Download, "Downloads", null, onDownloads)
+                ActionItem(Icons.Default.Language, "User Agent", null, onUserAgent)
+                ActionItem(Icons.Default.Public, "My IP Address", null, onMyIp)
             }
         }
     }
@@ -152,6 +169,7 @@ private fun ToggleItem(
 private fun ActionItem(
     icon: ImageVector,
     label: String,
+    sublabel: String?,
     onClick: () -> Unit,
 ) {
     Row(
@@ -163,11 +181,19 @@ private fun ActionItem(
     ) {
         Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(14.dp))
-        Text(
-            label,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 15.sp,
-            modifier = Modifier.weight(1f),
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                label,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 15.sp,
+            )
+            if (!sublabel.isNullOrBlank()) {
+                Text(
+                    sublabel,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
+            }
+        }
     }
 }
