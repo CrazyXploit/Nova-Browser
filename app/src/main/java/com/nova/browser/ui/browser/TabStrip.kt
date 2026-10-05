@@ -34,11 +34,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.nova.browser.data.TabEntity
 
 @Composable
@@ -98,7 +100,10 @@ private fun TabChip(
     ) {
         if (!tab.faviconUrl.isNullOrBlank()) {
             AsyncImage(
-                model = tab.faviconUrl,
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(tab.faviconUrl)
+                    .crossfade(false)
+                    .build(),
                 contentDescription = null,
                 modifier = Modifier
                     .size(16.dp)
