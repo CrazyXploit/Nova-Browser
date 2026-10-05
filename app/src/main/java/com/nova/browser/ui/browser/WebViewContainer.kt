@@ -28,6 +28,7 @@ import com.nova.browser.data.DataSaver
 import com.nova.browser.data.ErudaManager
 import com.nova.browser.data.HttpsEnforcer
 import com.nova.browser.data.ImageQualityManager
+import com.nova.browser.data.MediaSniffer
 import com.nova.browser.data.UserAgentManager
 
 private const val TAG = "NovaWebView"
@@ -70,6 +71,12 @@ fun WebViewContainer(
     LaunchedEffect(imageQuality, dataSaver) {
         val wv = holder.webView ?: return@LaunchedEffect
         ImageQualityManager.applyTo(wv.settings)
+        // If data saver is on, inject low-quality JS
+        if (ImageQualityManager.dataSaver) {
+            try {
+                wv.evaluateJavascript(ImageQualityManager.buildLowQualityJs(), null)
+            } catch (_: Exception) { }
+        }
     }
 
     AndroidView(
@@ -102,14 +109,27 @@ fun WebViewContainer(
                     mediaPlaybackRequiresUserGesture = true
                     useWideViewPort = true
                     loadWithOverviewMode = true
+
+                    // === FAST LOAD ===
                     cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-                    allowFileAccess = false
-                    allowContentAccess = false
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) safeBrowsingEnabled = false
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        isAlgorithmicDarkeningAllowed = true
+                    }
+                    // Back-forward cache
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        safeBrowsingEnabled = false
+                    }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         forceDark = WebSettings.FORCE_DARK_AUTO
                     }
-                    mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+
+                    allowFileAccess = false
+                    allowContentAccess = false
+
+                    // Prefetch network hints
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                    }
                 }
 
                 UserAgentManager.captureDefault(settings)
@@ -128,16 +148,20 @@ fun WebViewContainer(
                     ): WebResourceResponse? {
                         val uri = request?.url ?: return super.shouldInterceptRequest(view, request)
 
-                        // Asset loader for Eruda
                         val intercepted = assetLoader.shouldInterceptRequest(uri)
                         if (intercepted != null) return intercepted
 
-                        // Ad blocker
                         if (AdBlocker.shouldBlock(uri.toString())) {
                             return AdBlocker.blockedResponse()
                         }
 
-                        // Image blocking — track data saved
+                        // Media sniff — track video/audio/images
+                        if (request.method == "GET") {
+                            val ct = request.requestHeaders["Content-Type"]
+                            MediaSniffer.sniff(uri.toString(), ct, 0L)
+                        }
+
+                        // Image blocking
                         if (ImageQualityManager.shouldBlockImages()) {
                             val accept = request.requestHeaders["Accept"]
                             if (accept?.contains("image/") == true) {
@@ -151,11 +175,25 @@ fun WebViewContainer(
 
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         currentOnPageStarted()
+                        if (url != null && url != HOME_PLACEHOLDER) {
+                            try {
+                                val uri = java.net.URI(url)
+                                MediaSniffer.setPageHost(uri.host ?: "")
+                            } catch (_: Exception) { }
+                        }
                         if (ErudaManager.enabled && url != HOME_PLACEHOLDER) injectEruda(view)
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
                         if (ErudaManager.enabled && url != HOME_PLACEHOLDER) injectEruda(view)
+
+                        // Low-quality image JS if data saver is on
+                        if (ImageQualityManager.dataSaver && view != null) {
+                            try {
+                                view.evaluateJavascript(ImageQualityManager.buildLowQualityJs(), null)
+                            } catch (_: Exception) { }
+                        }
+
                         val faviconUrl = url?.let { pageUrl ->
                             try {
                                 val uri = java.net.URI(pageUrl)
