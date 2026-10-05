@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
@@ -59,14 +58,12 @@ fun OverlayMenu(
     erudaEnabled: Boolean,
     desktopMode: Boolean,
     isIncognito: Boolean,
-    httpsEnforced: Boolean,
     imageQualityLabel: String,
     dataSaver: Boolean,
     onToggleAdBlock: () -> Unit,
     onToggleEruda: () -> Unit,
     onToggleDesktop: () -> Unit,
     onToggleIncognito: () -> Unit,
-    onToggleHttps: () -> Unit,
     onUserAgent: () -> Unit,
     onMyIp: () -> Unit,
     onImageQuality: () -> Unit,
@@ -119,7 +116,6 @@ fun OverlayMenu(
 
                 ToggleItem(Icons.Default.Block, "Ad Blocker", adBlockEnabled, onToggleAdBlock)
                 ToggleItem(Icons.Default.Code, "Eruda DevTools", erudaEnabled, onToggleEruda)
-                ToggleItem(Icons.Default.Lock, "Force HTTPS", httpsEnforced, onToggleHttps)
                 ToggleItem(Icons.Default.Devices, "Desktop Mode", desktopMode, onToggleDesktop)
                 ToggleItem(Icons.Default.Visibility, "Incognito", isIncognito, onToggleIncognito)
 
