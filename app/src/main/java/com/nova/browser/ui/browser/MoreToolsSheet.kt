@@ -1,7 +1,6 @@
 package com.nova.browser.ui.browser
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,8 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Download
@@ -41,7 +40,7 @@ fun MoreToolsSheet(
     onToggleAdBlock: () -> Unit,
     onToggleIncognito: () -> Unit,
     onBookmarks: () -> Unit,
-    onHistory: () -> Unit,
+    onDownloads: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -64,7 +63,6 @@ fun MoreToolsSheet(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             )
 
-            // Ad Block toggle
             ToggleRow(
                 icon = Icons.Default.Block,
                 title = "Ad Blocker",
@@ -73,7 +71,6 @@ fun MoreToolsSheet(
                 onToggle = onToggleAdBlock,
             )
 
-            // Incognito toggle
             ToggleRow(
                 icon = Icons.Default.Visibility,
                 title = "Incognito Mode",
@@ -82,12 +79,12 @@ fun MoreToolsSheet(
                 onToggle = onToggleIncognito,
             )
 
-            ActionRow(Icons.Default.Bookmark, "Bookmarks", "Coming soon")
-            ActionRow(Icons.Default.History, "History", "Coming soon")
-            ActionRow(Icons.Default.Download, "Downloads", "Coming soon")
-            ActionRow(Icons.Default.DarkMode, "Dark Mode", "Coming soon")
-            ActionRow(Icons.Default.Devices, "Desktop Site", "Coming soon")
-            ActionRow(Icons.Default.Share, "Share Page", "Coming soon")
+            ActionRow(Icons.Default.Bookmark, "Bookmarks", "Tap to open", onBookmarks)
+            ActionRow(Icons.Default.Download, "Downloads", "Tap to open", onDownloads)
+            ActionRow(Icons.Default.History, "History", "Coming soon", null)
+            ActionRow(Icons.Default.DarkMode, "Dark Mode", "Coming soon", null)
+            ActionRow(Icons.Default.Devices, "Desktop Site", "Coming soon", null)
+            ActionRow(Icons.Default.Share, "Share Page", "Coming soon", null)
         }
     }
 }
@@ -127,10 +124,7 @@ private fun ToggleRow(
                 fontSize = 12.sp,
             )
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = { onToggle() },
-        )
+        Switch(checked = checked, onCheckedChange = { onToggle() })
     }
 }
 
@@ -139,25 +133,28 @@ private fun ActionRow(
     icon: ImageVector,
     title: String,
     subtitle: String,
+    onClick: (() -> Unit)?,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = false) { }
+            .clickable(enabled = onClick != null) { onClick?.invoke() }
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = if (onClick != null) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(22.dp),
         )
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (onClick != null) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
             )
