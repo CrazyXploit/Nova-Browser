@@ -130,10 +130,12 @@ fun BrowserScreen(
         MoreToolsSheet(
             adBlockEnabled = state.adBlockEnabled,
             erudaEnabled = state.erudaEnabled,
+            erudaReady = state.erudaReady,
             isIncognito = state.isIncognito,
             onToggleAdBlock = vm.toggleAdBlock,
             onToggleEruda = vm.toggleEruda,
             onToggleIncognito = vm.toggleIncognito,
+            onRedownloadEruda = vm.redownloadEruda,
             onBookmarks = {
                 vm.toggleMoreTools()
                 onOpenBookmarks()
