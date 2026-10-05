@@ -1,8 +1,6 @@
 package com.nova.browser.ui.browser
 
 import android.app.Application
-import android.net.Uri
-import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nova.browser.data.AdBlocker
@@ -24,7 +22,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 
@@ -123,8 +120,15 @@ class BrowserViewModel @Inject constructor(
         _state.update { it.copy(showTabSwitcher = !it.showTabSwitcher) }
     }
 
+    // FIX: Open overlay with EMPTY input and keep it open
+    // (do not auto-close on page load)
     val openSearchOverlay: () -> Unit = {
-        _state.update { it.copy(showSearchOverlay = true, urlInput = "") }
+        _state.update {
+            it.copy(
+                showSearchOverlay = true,
+                urlInput = "",  // clean slate each time
+            )
+        }
     }
 
     val closeSearchOverlay: () -> Unit = {
@@ -155,7 +159,7 @@ class BrowserViewModel @Inject constructor(
 
     val navigate: (String) -> Unit = { input ->
         val id = _state.value.activeTabId
-        if (id != null) {
+        if (id != null && input.isNotBlank()) {
             viewModelScope.launch {
                 val normalized = UrlUtils.normalize(input)
                 tabDao.upsert(
@@ -185,7 +189,11 @@ class BrowserViewModel @Inject constructor(
     }
 
     val onProgress: (Int) -> Unit = { p ->
-        _state.update { it.copy(progress = p) }
+        // Only update every 10% to reduce recomposition churn
+        val rounded = (p / 10) * 10
+        if (rounded != _state.value.progress / 10 * 10 || p >= 100) {
+            _state.update { it.copy(progress = p) }
+        }
     }
 
     val onPageFinished: (String, String, String?) -> Unit = { url, title, favicon ->
@@ -194,7 +202,12 @@ class BrowserViewModel @Inject constructor(
             if (id != null) {
                 val existing = _state.value.tabs.firstOrNull { it.id == id }
                 val newFavicon = favicon ?: existing?.faviconUrl
-                if (existing?.url != url || existing.title != title || existing.faviconUrl != newFavicon) {
+
+                // Only DB write if something actually changed
+                if (existing?.url != url ||
+                    existing.title != title ||
+                    existing.faviconUrl != newFavicon
+                ) {
                     tabDao.upsert(
                         TabEntity(
                             id = id,
@@ -210,7 +223,6 @@ class BrowserViewModel @Inject constructor(
                     }
                 }
 
-                // Check bookmark state
                 val bm = bookmarkDao.findByUrl(url)
                 _state.update {
                     it.copy(
@@ -256,7 +268,9 @@ class BrowserViewModel @Inject constructor(
     val onDownloadStart: (String, String?, String?, String?, Long) -> Unit =
         { url, userAgent, contentDisposition, mimeType, contentLength ->
             viewModelScope.launch {
-                val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
+                val fileName = android.webkit.URLUtil.guessFileName(
+                    url, contentDisposition, mimeType
+                )
                 downloadDao.insert(
                     DownloadEntity(
                         url = url,
@@ -293,6 +307,12 @@ class BrowserViewModel @Inject constructor(
                 isIncognito = _state.value.isIncognito,
             )
         )
-        _state.update { it.copy(activeTabId = id, urlInput = url) }
+        _state.update {
+            it.copy(
+                activeTabId = id,
+                urlInput = url,
+                showSearchOverlay = false,   // ensure clean state
+            )
+        }
     }
 }
