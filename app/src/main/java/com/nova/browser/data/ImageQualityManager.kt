@@ -33,28 +33,23 @@ object ImageQualityManager {
             .apply()
     }
 
-    fun setQuality(q: Quality) { quality = q }
-    fun setDataSaver(enabled: Boolean) { dataSaver = enabled }
+    fun updateQuality(q: Quality) {
+        quality = q
+    }
 
-    /**
-     * Effective quality — data saver forces LOW.
-     */
+    fun updateDataSaver(enabled: Boolean) {
+        dataSaver = enabled
+    }
+
     fun effectiveQuality(): Quality = if (dataSaver) Quality.LOW else quality
 
-    /**
-     * Block images entirely?
-     */
     fun shouldBlockImages(): Boolean = effectiveQuality() == Quality.OFF
 
-    /**
-     * Extra headers to reduce bandwidth.
-     */
     fun extraHeaders(): Map<String, String> {
         val headers = mutableMapOf<String, String>()
         if (dataSaver) {
             headers["Save-Data"] = "on"
             headers["X-Data-Saver"] = "on"
-            headers["Accept-CH"] = "Save-Data, Viewport-Width, DPR"
         }
         when (effectiveQuality()) {
             Quality.LOW -> {
@@ -64,9 +59,7 @@ object ImageQualityManager {
             Quality.MEDIUM -> {
                 headers["DPR"] = "1.5"
             }
-            Quality.HIGH -> {
-                // no override
-            }
+            Quality.HIGH -> { }
             Quality.OFF -> {
                 headers["Save-Data"] = "on"
             }
