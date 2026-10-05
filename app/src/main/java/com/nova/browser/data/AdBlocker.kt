@@ -7,46 +7,17 @@ import java.util.concurrent.atomic.AtomicInteger
 object AdBlocker {
 
     private val blockedHosts = hashSetOf(
-        "doubleclick.net",
-        "googlesyndication.com",
-        "googleadservices.com",
-        "google-analytics.com",
-        "googletagmanager.com",
-        "googletagservices.com",
-        "adservice.google.com",
-        "ads.google.com",
-        "pagead2.googlesyndication.com",
-        "partner.googleadservices.com",
-        "adnxs.com",
-        "ads.yahoo.com",
-        "advertising.com",
-        "amazon-adsystem.com",
-        "facebook.net",
-        "fbcdn.net",
-        "scorecardresearch.com",
-        "outbrain.com",
-        "taboola.com",
-        "criteo.com",
-        "criteo.net",
-        "pubmatic.com",
-        "rubiconproject.com",
-        "openx.net",
-        "casalemedia.com",
-        "smartadserver.com",
-        "sharethrough.com",
-        "teads.tv",
-        "adform.net",
-        "bidswitch.net",
-        "adroll.com",
-        "quantserve.com",
-        "hotjar.com",
-        "mixpanel.com",
-        "segment.io",
-        "segment.com",
-        "amplitude.com",
-        "branch.io",
-        "appsflyer.com",
-        "adjust.com",
+        "doubleclick.net", "googlesyndication.com", "googleadservices.com",
+        "google-analytics.com", "googletagmanager.com", "googletagservices.com",
+        "adservice.google.com", "ads.google.com", "pagead2.googlesyndication.com",
+        "partner.googleadservices.com", "adnxs.com", "ads.yahoo.com",
+        "advertising.com", "amazon-adsystem.com", "facebook.net", "fbcdn.net",
+        "scorecardresearch.com", "outbrain.com", "taboola.com", "criteo.com",
+        "criteo.net", "pubmatic.com", "rubiconproject.com", "openx.net",
+        "casalemedia.com", "smartadserver.com", "sharethrough.com", "teads.tv",
+        "adform.net", "bidswitch.net", "adroll.com", "quantserve.com",
+        "hotjar.com", "mixpanel.com", "segment.io", "segment.com",
+        "amplitude.com", "branch.io", "appsflyer.com", "adjust.com",
     )
 
     private val blockedKeywords = arrayOf(
@@ -77,12 +48,14 @@ object AdBlocker {
         for (host in blockedHosts) {
             if (lower.contains(host)) {
                 trackersBlocked = _trackerCount.incrementAndGet()
+                DataSaver.onBlockedResource()
                 return true
             }
         }
         for (kw in blockedKeywords) {
             if (lower.contains(kw)) {
                 adsBlocked = _adCount.incrementAndGet()
+                DataSaver.onBlockedResource()
                 return true
             }
         }
