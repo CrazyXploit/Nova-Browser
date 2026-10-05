@@ -17,7 +17,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.nova.browser.data.UserAgentManager
 
 private const val HOME_URL = "https://www.google.com"
 
@@ -44,7 +43,8 @@ fun BrowserScreen(
     BackHandler(enabled = state.showSiteInfo) { vm.closeSiteInfo() }
     BackHandler(enabled = state.showIpOverlay) { vm.closeIpOverlay() }
     BackHandler(
-        enabled = !state.showTabSwitcher && !state.showSearchOverlay &&
+        enabled = !state.showTabSwitcher &&
+            !state.showSearchOverlay &&
             webViewRef.value?.canGoBack() == true
     ) {
         webViewRef.value?.goBack()
@@ -88,10 +88,7 @@ fun BrowserScreen(
                     onHome = { vm.goHome() },
                     onTabs = vm.toggleTabSwitcher,
                     onMore = vm.toggleOverlayMenu,
-                    onLongPressMore = {
-                        // Long press → open overlay (or same behavior)
-                        vm.toggleOverlayMenu()
-                    },
+                    onLongPressMore = { vm.toggleOverlayMenu() },
                 )
             },
         ) { padding ->
@@ -103,7 +100,7 @@ fun BrowserScreen(
                 WebViewContainer(
                     initialUrl = state.activeTab?.url.orEmpty(),
                     isIncognito = state.isIncognito,
-                    desktopMode = state.desktopMode,
+                    userAgentMode = state.userAgentMode,
                     onPageStarted = vm.onPageStarted,
                     onProgress = vm.onProgress,
                     onPageFinished = vm.onPageFinished,
@@ -133,13 +130,14 @@ fun BrowserScreen(
         if (state.showIpOverlay) {
             MyIpOverlay(
                 ip = state.myIp,
+                loading = state.myIpLoading,
                 onDismiss = vm.closeIpOverlay,
             )
         }
 
         if (state.showUserAgentPicker) {
             UserAgentPicker(
-                current = UserAgentManager.mode,
+                current = state.userAgentMode,
                 onPick = vm.setUserAgent,
                 onDismiss = vm.closeUserAgentPicker,
             )
