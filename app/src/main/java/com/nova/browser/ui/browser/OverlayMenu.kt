@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Visibility
@@ -71,6 +72,7 @@ fun OverlayMenu(
     onImageQuality: () -> Unit,
     onFind: () -> Unit,
     onSearchEngine: () -> Unit,
+    onMedia: () -> Unit,
     onHistory: () -> Unit,
     onBookmarks: () -> Unit,
     onDownloads: () -> Unit,
@@ -129,6 +131,7 @@ fun OverlayMenu(
                     "$imageQualityLabel${if (dataSaver) " · Data Saver" else ""}",
                     onImageQuality,
                 )
+                ActionItem(Icons.Default.Movie, "Media on page", null, onMedia)
                 ActionItem(Icons.Default.Search, "Search Engine", null, onSearchEngine)
                 ActionItem(Icons.Default.Search, "Find in page", null, onFind)
                 ActionItem(Icons.Default.History, "History", null, onHistory)
