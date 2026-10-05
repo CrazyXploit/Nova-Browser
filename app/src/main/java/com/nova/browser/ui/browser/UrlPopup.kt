@@ -1,13 +1,8 @@
 package com.nova.browser.ui.browser
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +18,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -65,10 +59,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/**
- * Small URL popup that appears above the URL bar (not fullscreen).
- * Has a Maximize button → rectangular editor with black background.
- */
 @Composable
 fun UrlPopup(
     visible: Boolean,
@@ -82,10 +72,10 @@ fun UrlPopup(
 ) {
     if (!visible) return
 
-    // Status bar padding so popup appears just above URL bar
     val statusBarPad = WindowInsets.statusBars.asPaddingValues()
     val topPad = statusBarPad.calculateTopPadding()
 
+    // Local edit state — keyed to url so it resets when tab/url changes externally
     var fieldValue by remember(url) {
         mutableStateOf(
             TextFieldValue(
@@ -97,6 +87,7 @@ fun UrlPopup(
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
+    // Request focus when popup opens or maximize toggles
     LaunchedEffect(visible, maximized) {
         focusRequester.requestFocus()
         keyboard?.show()
@@ -111,22 +102,34 @@ fun UrlPopup(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.55f))
-                .clickable { onDismiss() }
                 .imePadding(),
         ) {
+            // ── Background scrim that closes popup on tap ──
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        keyboard?.hide()
+                        onDismiss()
+                    }
+            )
+
+            // ── Popup content (sits on top, doesn't inherit scrim click) ──
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        top = topPad + 56.dp,
+                        top = topPad + 52.dp,
                         start = 8.dp,
                         end = 8.dp,
-                    )
-                    .clickable { /* consume */ },
+                    ),
             ) {
                 if (!maximized) {
-                    // ── Small popup row ─────────────────────
+                    // ── Small popup row ────────────────────────
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -158,7 +161,7 @@ fun UrlPopup(
                                 .weight(1f)
                                 .focusRequester(focusRequester),
                         )
-                        Spacer(Modifier.width(4.dp))
+                        Spacer(Modifier.width(2.dp))
                         IconButton(
                             onClick = onRefresh,
                             modifier = Modifier.size(34.dp),
@@ -180,7 +183,7 @@ fun UrlPopup(
                             )
                         }
                         IconButton(
-                            onClick = { keyboard?.hide(); onNavigate() },
+                            onClick = onNavigate,
                             modifier = Modifier.size(34.dp),
                         ) {
                             Icon(
@@ -191,7 +194,7 @@ fun UrlPopup(
                         }
                     }
                 } else {
-                    // ── Maximized rectangular editor ───────
+                    // ── Maximized rectangular editor ──────────
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -221,7 +224,10 @@ fun UrlPopup(
                                 )
                             }
                             IconButton(
-                                onClick = onDismiss,
+                                onClick = {
+                                    keyboard?.hide()
+                                    onDismiss()
+                                },
                                 modifier = Modifier.size(30.dp),
                             ) {
                                 Icon(
