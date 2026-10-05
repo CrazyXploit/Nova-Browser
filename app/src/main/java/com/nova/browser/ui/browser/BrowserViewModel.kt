@@ -38,7 +38,8 @@ data class BrowserUiState(
     val isLoading: Boolean = false,
     val progress: Int = 0,
     val showTabSwitcher: Boolean = false,
-    val showSearchOverlay: Boolean = false,
+    val showUrlPopup: Boolean = false,
+    val urlMaximized: Boolean = false,
     val showOverlayMenu: Boolean = false,
     val showSiteInfo: Boolean = false,
     val showIpOverlay: Boolean = false,
@@ -77,11 +78,29 @@ class BrowserViewModel @Inject constructor(
     val downloads: StateFlow<List<DownloadEntity>> = downloadDao.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // ── WebView reference for go/back/forward/reload ───────
+    @Volatile private var webViewRef: android.webkit.WebView? = null
+
+    fun attachWebView(wv: android.webkit.WebView) {
+        webViewRef = wv
+    }
+
+    val goBack: () -> Unit = {
+        webViewRef?.let { if (it.canGoBack()) it.goBack() }
+    }
+    val goForward: () -> Unit = {
+        webViewRef?.let { if (it.canGoForward()) it.goForward() }
+    }
+    val reload: () -> Unit = {
+        webViewRef?.reload()
+    }
+    val canGoBack: () -> Boolean = { webViewRef?.canGoBack() == true }
+    val canGoForward: () -> Boolean = { webViewRef?.canGoForward() == true }
+
     init {
         AdBlocker.enabled = true
         ErudaManager.enabled = true
 
-        // Load UA + Eruda
         val ctx = getApplication<Application>()
         UserAgentManager.load(ctx)
         _state.update {
@@ -98,11 +117,11 @@ class BrowserViewModel @Inject constructor(
 
         viewModelScope.launch {
             tabDao.observeAll().collect { tabs ->
-                val current = _state.value
-                val active = current.activeTabId
+                val cur = _state.value
+                val active = cur.activeTabId
                     ?.takeIf { id -> tabs.any { it.id == id } }
                     ?: tabs.firstOrNull()?.id
-                if (current.tabs != tabs || current.activeTabId != active) {
+                if (cur.tabs != tabs || cur.activeTabId != active) {
                     _state.update { it.copy(tabs = tabs, activeTabId = active) }
                 }
             }
@@ -144,141 +163,25 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
-    // ── UI toggles ─────────────────────────────────────────
-    val toggleTabSwitcher: () -> Unit = {
-        _state.update { it.copy(showTabSwitcher = !it.showTabSwitcher) }
-    }
-
-    val openSearchOverlay: () -> Unit = {
-        // Pre-fill with current URL for editing
+    // ── URL popup ──────────────────────────────────────────
+    val openUrlPopup: () -> Unit = {
         _state.update {
             it.copy(
-                showSearchOverlay = true,
+                showUrlPopup = true,
                 urlInput = it.activeTab?.url.orEmpty(),
+                urlMaximized = false,
             )
         }
     }
 
-    val closeSearchOverlay: () -> Unit = {
-        _state.update { it.copy(showSearchOverlay = false) }
+    val closeUrlPopup: () -> Unit = {
+        _state.update { it.copy(showUrlPopup = false, urlMaximized = false) }
     }
 
-    val toggleOverlayMenu: () -> Unit = {
-        _state.update { it.copy(showOverlayMenu = !it.showOverlayMenu) }
+    val toggleUrlMaximize: () -> Unit = {
+        _state.update { it.copy(urlMaximized = !it.urlMaximized) }
     }
 
-    val closeOverlayMenu: () -> Unit = {
-        _state.update { it.copy(showOverlayMenu = false) }
-    }
-
-    val toggleSiteInfo: () -> Unit = {
-        _state.update { it.copy(showSiteInfo = !it.showSiteInfo) }
-    }
-
-    val closeSiteInfo: () -> Unit = {
-        _state.update { it.copy(showSiteInfo = false) }
-    }
-
-    val openIpOverlay: () -> Unit = {
-        _state.update { it.copy(showIpOverlay = true, myIpLoading = true, myIp = "") }
-        fetchMyIp()
-    }
-
-    val closeIpOverlay: () -> Unit = {
-        _state.update { it.copy(showIpOverlay = false) }
-    }
-
-    val openUserAgentPicker: () -> Unit = {
-        _state.update { it.copy(showUserAgentPicker = true) }
-    }
-
-    val closeUserAgentPicker: () -> Unit = {
-        _state.update { it.copy(showUserAgentPicker = false) }
-    }
-
-    val toggleAdBlock: () -> Unit = {
-        AdBlocker.enabled = !AdBlocker.enabled
-        _state.update { it.copy(adBlockEnabled = AdBlocker.enabled) }
-    }
-
-    val toggleEruda: () -> Unit = {
-        ErudaManager.enabled = !ErudaManager.enabled
-        _state.update { it.copy(erudaEnabled = ErudaManager.enabled) }
-    }
-
-    val toggleIncognito: () -> Unit = {
-        viewModelScope.launch {
-            val incognito = !_state.value.isIncognito
-            _state.update { it.copy(isIncognito = incognito) }
-            createTab(HOME_URL)
-        }
-    }
-
-    val toggleDesktopMode: () -> Unit = {
-        val newDesktop = !_state.value.desktopMode
-        val newMode = if (newDesktop) UserAgentManager.Mode.DESKTOP
-        else UserAgentManager.Mode.MOBILE
-        UserAgentManager.setMode(newMode)
-        UserAgentManager.save(getApplication())
-
-        _state.update {
-            it.copy(
-                desktopMode = newDesktop,
-                userAgentMode = newMode,
-                showOverlayMenu = false,
-            )
-        }
-
-        // Force reload current tab so UA applies
-        reloadCurrentTab()
-    }
-
-    val setUserAgent: (String) -> Unit = { ua ->
-        val newMode = when (ua) {
-            "mobile" -> UserAgentManager.Mode.MOBILE
-            "desktop" -> UserAgentManager.Mode.DESKTOP
-            else -> UserAgentManager.Mode.CUSTOM
-        }
-        UserAgentManager.setMode(newMode, if (newMode == UserAgentManager.Mode.CUSTOM) ua else null)
-        UserAgentManager.save(getApplication())
-
-        _state.update {
-            it.copy(
-                showUserAgentPicker = false,
-                userAgentMode = newMode,
-                desktopMode = newMode == UserAgentManager.Mode.DESKTOP,
-            )
-        }
-
-        reloadCurrentTab()
-    }
-
-    val goHome: () -> Unit = { navigate(HOME_URL) }
-
-    val redownloadEruda: () -> Unit = {
-        viewModelScope.launch {
-            val ok = ErudaManager.forceRedownload(getApplication())
-            _state.update { it.copy(erudaReady = ok) }
-        }
-    }
-
-    private fun reloadCurrentTab() {
-        val url = _state.value.activeTab?.url ?: return
-        if (url.isBlank() || url.startsWith("about:")) return
-
-        viewModelScope.launch {
-            // Force WebView reload by writing a fresh url with timestamp
-            tabDao.upsert(
-                _state.value.activeTab!!.copy(url = "$url ")
-            )
-            tabDao.upsert(
-                _state.value.activeTab!!.copy(url = url)
-            )
-            _state.update { it.copy(isLoading = true, progress = 0) }
-        }
-    }
-
-    // ── Navigation ─────────────────────────────────────────
     val onUrlInputChange: (String) -> Unit = { input ->
         _state.update { it.copy(urlInput = input) }
     }
@@ -302,10 +205,100 @@ class BrowserViewModel @Inject constructor(
                         urlInput = normalized,
                         isLoading = true,
                         progress = 0,
-                        showSearchOverlay = false,
+                        showUrlPopup = false,
+                        urlMaximized = false,
                     )
                 }
             }
+        }
+    }
+
+    // ── Overlay toggles ────────────────────────────────────
+    val toggleTabSwitcher: () -> Unit = {
+        _state.update { it.copy(showTabSwitcher = !it.showTabSwitcher) }
+    }
+    val toggleOverlayMenu: () -> Unit = {
+        _state.update { it.copy(showOverlayMenu = !it.showOverlayMenu) }
+    }
+    val closeOverlayMenu: () -> Unit = {
+        _state.update { it.copy(showOverlayMenu = false) }
+    }
+    val toggleSiteInfo: () -> Unit = {
+        _state.update { it.copy(showSiteInfo = !it.showSiteInfo) }
+    }
+    val closeSiteInfo: () -> Unit = {
+        _state.update { it.copy(showSiteInfo = false) }
+    }
+    val openIpOverlay: () -> Unit = {
+        _state.update { it.copy(showIpOverlay = true, myIpLoading = true, myIp = "") }
+        fetchMyIp()
+    }
+    val closeIpOverlay: () -> Unit = {
+        _state.update { it.copy(showIpOverlay = false) }
+    }
+    val openUserAgentPicker: () -> Unit = {
+        _state.update { it.copy(showUserAgentPicker = true) }
+    }
+    val closeUserAgentPicker: () -> Unit = {
+        _state.update { it.copy(showUserAgentPicker = false) }
+    }
+
+    val toggleAdBlock: () -> Unit = {
+        AdBlocker.enabled = !AdBlocker.enabled
+        _state.update { it.copy(adBlockEnabled = AdBlocker.enabled) }
+    }
+    val toggleEruda: () -> Unit = {
+        ErudaManager.enabled = !ErudaManager.enabled
+        _state.update { it.copy(erudaEnabled = ErudaManager.enabled) }
+    }
+    val toggleIncognito: () -> Unit = {
+        viewModelScope.launch {
+            val incognito = !_state.value.isIncognito
+            _state.update { it.copy(isIncognito = incognito) }
+            createTab(HOME_URL)
+        }
+    }
+
+    val toggleDesktopMode: () -> Unit = {
+        val newDesktop = !_state.value.desktopMode
+        val newMode = if (newDesktop) UserAgentManager.Mode.DESKTOP
+        else UserAgentManager.Mode.MOBILE
+        UserAgentManager.setMode(newMode)
+        UserAgentManager.save(getApplication())
+        _state.update {
+            it.copy(
+                desktopMode = newDesktop,
+                userAgentMode = newMode,
+                showOverlayMenu = false,
+            )
+        }
+        reload()
+    }
+
+    val setUserAgent: (String) -> Unit = { ua ->
+        val newMode = when (ua) {
+            "mobile" -> UserAgentManager.Mode.MOBILE
+            "desktop" -> UserAgentManager.Mode.DESKTOP
+            else -> UserAgentManager.Mode.CUSTOM
+        }
+        UserAgentManager.setMode(newMode, if (newMode == UserAgentManager.Mode.CUSTOM) ua else null)
+        UserAgentManager.save(getApplication())
+        _state.update {
+            it.copy(
+                showUserAgentPicker = false,
+                userAgentMode = newMode,
+                desktopMode = newMode == UserAgentManager.Mode.DESKTOP,
+            )
+        }
+        reload()
+    }
+
+    val goHome: () -> Unit = { navigate(HOME_URL) }
+
+    val redownloadEruda: () -> Unit = {
+        viewModelScope.launch {
+            val ok = ErudaManager.forceRedownload(getApplication())
+            _state.update { it.copy(erudaReady = ok) }
         }
     }
 
@@ -315,50 +308,48 @@ class BrowserViewModel @Inject constructor(
     }
 
     val onProgress: (Int) -> Unit = { p ->
-        val current = _state.value.progress
-        if (current / 10 != p / 10 || p == 100) {
+        val c = _state.value.progress
+        if (c / 10 != p / 10 || p == 100) {
             _state.update { it.copy(progress = p) }
         }
     }
 
     val onPageFinished: (String, String, String?) -> Unit = { url, title, favicon ->
         viewModelScope.launch {
-            val id = _state.value.activeTabId
-            if (id != null) {
-                val existing = _state.value.tabs.firstOrNull { it.id == id }
-                val newFavicon = favicon ?: existing?.faviconUrl
+            val id = _state.value.activeTabId ?: return@launch
+            val existing = _state.value.tabs.firstOrNull { it.id == id }
+            val newFavicon = favicon ?: existing?.faviconUrl
 
-                if (existing?.url != url ||
-                    existing.title != title ||
-                    existing.faviconUrl != newFavicon
-                ) {
-                    tabDao.upsert(
-                        TabEntity(
-                            id = id,
-                            url = url,
-                            title = title.ifBlank { UrlUtils.displayHost(url) },
-                            faviconUrl = newFavicon,
-                            lastActive = existing?.lastActive ?: System.currentTimeMillis(),
-                            isIncognito = _state.value.isIncognito,
-                        )
+            if (existing?.url != url ||
+                existing.title != title ||
+                existing.faviconUrl != newFavicon
+            ) {
+                tabDao.upsert(
+                    TabEntity(
+                        id = id,
+                        url = url,
+                        title = title.ifBlank { UrlUtils.displayHost(url) },
+                        faviconUrl = newFavicon,
+                        lastActive = existing?.lastActive ?: System.currentTimeMillis(),
+                        isIncognito = _state.value.isIncognito,
                     )
-                    if (!_state.value.isIncognito) {
-                        historyDao.insert(HistoryEntity(url = url, title = title))
-                    }
+                )
+                if (!_state.value.isIncognito) {
+                    historyDao.insert(HistoryEntity(url = url, title = title))
                 }
+            }
 
-                val bm = bookmarkDao.findByUrl(url)
-                val s = _state.value
-                if (s.isLoading || s.progress != 100 ||
-                    s.isCurrentUrlBookmarked != (bm != null)
-                ) {
-                    _state.update {
-                        it.copy(
-                            isLoading = false,
-                            progress = 100,
-                            isCurrentUrlBookmarked = bm != null,
-                        )
-                    }
+            val bm = bookmarkDao.findByUrl(url)
+            val s = _state.value
+            if (s.isLoading || s.progress != 100 ||
+                s.isCurrentUrlBookmarked != (bm != null)
+            ) {
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        progress = 100,
+                        isCurrentUrlBookmarked = bm != null,
+                    )
                 }
             }
         }
@@ -394,26 +385,18 @@ class BrowserViewModel @Inject constructor(
 
     // ── Downloads ──────────────────────────────────────────
     val onDownloadStart: (String, String?, String?, String?, Long) -> Unit =
-        { url, userAgent, contentDisposition, mimeType, contentLength ->
+        { url, ua, cd, mime, len ->
             viewModelScope.launch {
                 val ctx = getApplication<Application>()
-                val fileName = android.webkit.URLUtil.guessFileName(
-                    url, contentDisposition, mimeType
-                )
-                val dmId = DownloadManagerHelper.enqueue(
-                    context = ctx,
-                    url = url,
-                    userAgent = userAgent,
-                    contentDisposition = contentDisposition,
-                    mimeType = mimeType,
-                )
+                val fileName = android.webkit.URLUtil.guessFileName(url, cd, mime)
+                val dmId = DownloadManagerHelper.enqueue(ctx, url, ua, cd, mime)
                 downloadDao.insert(
                     DownloadEntity(
-                        id = if (dmId > 0) dmId else 0L,
+                        id = if (dmId > 0) dmId else System.currentTimeMillis(),
                         url = url,
                         fileName = fileName,
-                        mimeType = mimeType,
-                        contentLength = contentLength,
+                        mimeType = mime,
+                        contentLength = len,
                         status = if (dmId > 0) "DOWNLOADING" else "FAILED",
                     )
                 )
@@ -433,7 +416,6 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
-    // ── My IP ──────────────────────────────────────────────
     private fun fetchMyIp() {
         viewModelScope.launch {
             val ip = MyIpFetcher.fetch()
@@ -451,11 +433,7 @@ class BrowserViewModel @Inject constructor(
             )
         )
         _state.update {
-            it.copy(
-                activeTabId = id,
-                urlInput = url,
-                showSearchOverlay = false,
-            )
+            it.copy(activeTabId = id, urlInput = url, showUrlPopup = false)
         }
     }
 }
