@@ -16,10 +16,12 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
@@ -38,10 +40,12 @@ import androidx.compose.ui.unit.sp
 fun MoreToolsSheet(
     adBlockEnabled: Boolean,
     erudaEnabled: Boolean,
+    erudaReady: Boolean,
     isIncognito: Boolean,
     onToggleAdBlock: () -> Unit,
     onToggleEruda: () -> Unit,
     onToggleIncognito: () -> Unit,
+    onRedownloadEruda: () -> Unit,
     onBookmarks: () -> Unit,
     onDownloads: () -> Unit,
     onDismiss: () -> Unit,
@@ -77,9 +81,15 @@ fun MoreToolsSheet(
             ToggleRow(
                 icon = Icons.Default.Code,
                 title = "Eruda DevTools",
-                subtitle = if (erudaEnabled) "On — console on every page" else "Off",
+                subtitle = when {
+                    !erudaReady -> "Downloading…"
+                    erudaEnabled -> "On — console on every page"
+                    else -> "Off"
+                },
                 checked = erudaEnabled,
                 onToggle = onToggleEruda,
+                actionIcon = if (erudaReady) Icons.Default.Refresh else null,
+                onAction = onRedownloadEruda,
             )
 
             ToggleRow(
@@ -107,6 +117,8 @@ private fun ToggleRow(
     subtitle: String,
     checked: Boolean,
     onToggle: () -> Unit,
+    actionIcon: ImageVector? = null,
+    onAction: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -134,6 +146,16 @@ private fun ToggleRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
             )
+        }
+        if (actionIcon != null && onAction != null) {
+            IconButton(onClick = onAction) {
+                Icon(
+                    actionIcon,
+                    contentDescription = "Refresh",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
         Switch(checked = checked, onCheckedChange = { onToggle() })
     }
