@@ -8,12 +8,14 @@ import androidx.room.RoomDatabase
         TabEntity::class,
         HistoryEntity::class,
         BookmarkEntity::class,
+        DownloadEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class NovaDatabase : RoomDatabase() {
     abstract fun tabDao(): TabDao
     abstract fun historyDao(): HistoryDao
     abstract fun bookmarkDao(): BookmarkDao
+    abstract fun downloadDao(): DownloadDao
 }
