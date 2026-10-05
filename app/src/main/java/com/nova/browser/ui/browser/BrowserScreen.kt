@@ -1,6 +1,5 @@
 package com.nova.browser.ui.browser
 
-import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,11 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -28,29 +23,13 @@ fun BrowserScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
 
-    val webViewRef = remember { mutableStateOf<WebView?>(null) }
-    var canGoBack by remember { mutableStateOf(false) }
-    var canGoForward by remember { mutableStateOf(false) }
-
-    LaunchedEffect(state.progress, state.activeTabId) {
-        val wv = webViewRef.value
-        canGoBack = wv?.canGoBack() == true
-        canGoForward = wv?.canGoForward() == true
-    }
-
+    BackHandler(enabled = state.showUrlPopup) { vm.closeUrlPopup() }
     BackHandler(enabled = state.showTabSwitcher) { vm.toggleTabSwitcher() }
     BackHandler(enabled = state.showOverlayMenu) { vm.closeOverlayMenu() }
     BackHandler(enabled = state.showSiteInfo) { vm.closeSiteInfo() }
     BackHandler(enabled = state.showIpOverlay) { vm.closeIpOverlay() }
-    BackHandler(
-        enabled = !state.showTabSwitcher &&
-            !state.showSearchOverlay &&
-            webViewRef.value?.canGoBack() == true
-    ) {
-        webViewRef.value?.goBack()
-        canGoBack = webViewRef.value?.canGoBack() == true
-        canGoForward = webViewRef.value?.canGoForward() == true
-    }
+    BackHandler(enabled = state.showUserAgentPicker) { vm.closeUserAgentPicker() }
+    BackHandler(enabled = vm.canGoBack()) { vm.goBack() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -62,8 +41,9 @@ fun BrowserScreen(
                     progress = state.progress,
                     isIncognito = state.isIncognito,
                     isBookmarked = state.isCurrentUrlBookmarked,
-                    onBarClick = vm.openSearchOverlay,
+                    onBarClick = vm.openUrlPopup,
                     onBookmarkClick = vm.toggleBookmark,
+                    onRefreshClick = vm.reload,
                     onShieldClick = vm.toggleSiteInfo,
                     onMoreClick = vm.toggleOverlayMenu,
                     onTabsClick = vm.toggleTabSwitcher,
@@ -72,23 +52,15 @@ fun BrowserScreen(
             },
             bottomBar = {
                 BottomBar(
-                    canGoBack = canGoBack,
-                    canGoForward = canGoForward,
+                    canGoBack = vm.canGoBack(),
+                    canGoForward = vm.canGoForward(),
                     tabCount = state.tabs.size,
-                    onBack = {
-                        webViewRef.value?.goBack()
-                        canGoBack = webViewRef.value?.canGoBack() == true
-                        canGoForward = webViewRef.value?.canGoForward() == true
-                    },
-                    onForward = {
-                        webViewRef.value?.goForward()
-                        canGoBack = webViewRef.value?.canGoBack() == true
-                        canGoForward = webViewRef.value?.canGoForward() == true
-                    },
-                    onHome = { vm.goHome() },
+                    onBack = vm.goBack,
+                    onForward = vm.goForward,
+                    onHome = vm.goHome,
                     onTabs = vm.toggleTabSwitcher,
                     onMore = vm.toggleOverlayMenu,
-                    onLongPressMore = { vm.toggleOverlayMenu() },
+                    onLongPressMore = vm.toggleOverlayMenu,
                 )
             },
         ) { padding ->
@@ -105,20 +77,22 @@ fun BrowserScreen(
                     onProgress = vm.onProgress,
                     onPageFinished = vm.onPageFinished,
                     onDownloadStart = vm.onDownloadStart,
+                    onWebViewCreated = { wv -> vm.attachWebView(wv) },
                 )
             }
         }
 
-        if (state.showSearchOverlay) {
-            val history by vm.history.collectAsStateWithLifecycle()
-            SearchOverlay(
-                history = history,
-                currentUrl = state.activeTab?.url.orEmpty(),
-                onNavigate = vm.navigate,
-                onDismiss = vm.closeSearchOverlay,
-                onClearHistory = vm.clearHistory,
-            )
-        }
+        // URL popup — small popup above URL bar (top-aligned)
+        UrlPopup(
+            visible = state.showUrlPopup,
+            url = state.urlInput,
+            maximized = state.urlMaximized,
+            onUrlChange = vm.onUrlInputChange,
+            onNavigate = { vm.navigate(state.urlInput) },
+            onRefresh = vm.reload,
+            onToggleMaximize = vm.toggleUrlMaximize,
+            onDismiss = vm.closeUrlPopup,
+        )
 
         if (state.showSiteInfo) {
             SiteInfoOverlay(
