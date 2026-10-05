@@ -25,7 +25,6 @@ fun BrowserScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
 
-    // Back handling — CLOSE OVERLAYS first, then go back, then home
     BackHandler(enabled = state.longPressTarget != null) { vm.closeLongPress() }
     BackHandler(enabled = state.showInPageFind) { vm.closeFind() }
     BackHandler(enabled = state.showMediaPanel) { vm.closeMediaPanel() }
@@ -38,13 +37,8 @@ fun BrowserScreen(
     BackHandler(enabled = state.showImageQualityPicker) { vm.closeImageQualityPicker() }
     BackHandler(enabled = state.showSearchEnginePicker) { vm.closeSearchEnginePicker() }
 
-    // System back: if can't go back in history, go to home (don't exit)
+    // System back → go to home when not already there
     BackHandler(enabled = !state.isHomeVisible) { vm.goBackOrHome() }
-    BackHandler(enabled = state.isHomeVisible) {
-        // At home — allow the OS to handle (exit app)
-        // Returning false here would... but BackHandler can't return false.
-        // So we DON'T register this one. Remove the line below if you want exit.
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -232,14 +226,12 @@ fun BrowserScreen(
         erudaEnabled = state.erudaEnabled,
         desktopMode = state.desktopMode,
         isIncognito = state.isIncognito,
-        httpsEnforced = state.httpsEnforced,
         imageQualityLabel = state.effectiveQualityLabel,
         dataSaver = state.dataSaver,
         onToggleAdBlock = vm.toggleAdBlock,
         onToggleEruda = vm.toggleEruda,
         onToggleDesktop = vm.toggleDesktopMode,
         onToggleIncognito = vm.toggleIncognito,
-        onToggleHttps = vm.toggleHttpsEnforcement,
         onUserAgent = { vm.closeOverlayMenu(); vm.openUserAgentPicker() },
         onMyIp = { vm.closeOverlayMenu(); vm.openIpOverlay() },
         onImageQuality = { vm.closeOverlayMenu(); vm.openImageQualityPicker() },
