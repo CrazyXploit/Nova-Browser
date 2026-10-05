@@ -26,7 +26,6 @@ import androidx.webkit.WebViewAssetLoader
 import com.nova.browser.data.AdBlocker
 import com.nova.browser.data.DataSaver
 import com.nova.browser.data.ErudaManager
-import com.nova.browser.data.HttpsEnforcer
 import com.nova.browser.data.ImageQualityManager
 import com.nova.browser.data.MediaSniffer
 import com.nova.browser.data.UserAgentManager
@@ -71,7 +70,6 @@ fun WebViewContainer(
     LaunchedEffect(imageQuality, dataSaver) {
         val wv = holder.webView ?: return@LaunchedEffect
         ImageQualityManager.applyTo(wv.settings)
-        // If data saver is on, inject low-quality JS
         if (ImageQualityManager.dataSaver) {
             try {
                 wv.evaluateJavascript(ImageQualityManager.buildLowQualityJs(), null)
@@ -109,27 +107,14 @@ fun WebViewContainer(
                     mediaPlaybackRequiresUserGesture = true
                     useWideViewPort = true
                     loadWithOverviewMode = true
-
-                    // === FAST LOAD ===
                     cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        isAlgorithmicDarkeningAllowed = true
-                    }
-                    // Back-forward cache
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        safeBrowsingEnabled = false
-                    }
+                    allowFileAccess = false
+                    allowContentAccess = false
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) safeBrowsingEnabled = false
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         forceDark = WebSettings.FORCE_DARK_AUTO
                     }
-
-                    allowFileAccess = false
-                    allowContentAccess = false
-
-                    // Prefetch network hints
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                        mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                    }
+                    mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                 }
 
                 UserAgentManager.captureDefault(settings)
@@ -155,13 +140,11 @@ fun WebViewContainer(
                             return AdBlocker.blockedResponse()
                         }
 
-                        // Media sniff — track video/audio/images
                         if (request.method == "GET") {
                             val ct = request.requestHeaders["Content-Type"]
                             MediaSniffer.sniff(uri.toString(), ct, 0L)
                         }
 
-                        // Image blocking
                         if (ImageQualityManager.shouldBlockImages()) {
                             val accept = request.requestHeaders["Accept"]
                             if (accept?.contains("image/") == true) {
@@ -186,8 +169,6 @@ fun WebViewContainer(
 
                     override fun onPageFinished(view: WebView?, url: String?) {
                         if (ErudaManager.enabled && url != HOME_PLACEHOLDER) injectEruda(view)
-
-                        // Low-quality image JS if data saver is on
                         if (ImageQualityManager.dataSaver && view != null) {
                             try {
                                 view.evaluateJavascript(ImageQualityManager.buildLowQualityJs(), null)
@@ -234,9 +215,7 @@ fun WebViewContainer(
                 if (initialUrl == HOME_PLACEHOLDER || initialUrl.isBlank()) {
                     loadUrl("about:blank")
                 } else {
-                    val target = if (HttpsEnforcer.enforceHttps)
-                        HttpsEnforcer.upgrade(initialUrl) else initialUrl
-                    loadUrl(target, ImageQualityManager.extraHeaders())
+                    loadUrl(initialUrl, ImageQualityManager.extraHeaders())
                 }
             }
         },
@@ -250,9 +229,7 @@ fun WebViewContainer(
                 if (initialUrl == HOME_PLACEHOLDER) {
                     wv.loadUrl("about:blank")
                 } else if (!initialUrl.startsWith("about:")) {
-                    val target = if (HttpsEnforcer.enforceHttps)
-                        HttpsEnforcer.upgrade(initialUrl) else initialUrl
-                    wv.loadUrl(target, ImageQualityManager.extraHeaders())
+                    wv.loadUrl(initialUrl, ImageQualityManager.extraHeaders())
                 }
             }
         },
