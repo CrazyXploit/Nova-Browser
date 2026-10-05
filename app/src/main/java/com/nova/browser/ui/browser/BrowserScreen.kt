@@ -25,7 +25,6 @@ fun BrowserScreen(
     onOpenDownloads: () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val history by vm.history.collectAsStateWithLifecycle()
 
     val webViewRef = remember { mutableStateOf<WebView?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
@@ -103,6 +102,7 @@ fun BrowserScreen(
         }
 
         if (state.showSearchOverlay) {
+            val history by vm.history.collectAsStateWithLifecycle()
             SearchOverlay(
                 history = history,
                 currentUrl = state.activeTab?.url.orEmpty(),
