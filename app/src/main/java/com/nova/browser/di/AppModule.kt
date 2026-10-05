@@ -3,6 +3,7 @@ package com.nova.browser.di
 import android.content.Context
 import androidx.room.Room
 import com.nova.browser.data.BookmarkDao
+import com.nova.browser.data.DownloadDao
 import com.nova.browser.data.HistoryDao
 import com.nova.browser.data.NovaDatabase
 import com.nova.browser.data.TabDao
@@ -32,4 +33,7 @@ object AppModule {
 
     @Provides
     fun provideBookmarkDao(db: NovaDatabase): BookmarkDao = db.bookmarkDao()
+
+    @Provides
+    fun provideDownloadDao(db: NovaDatabase): DownloadDao = db.downloadDao()
 }
