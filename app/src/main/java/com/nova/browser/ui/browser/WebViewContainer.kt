@@ -2,6 +2,8 @@ package com.nova.browser.ui.browser
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.webkit.CookieManager
+import android.webkit.DownloadListener
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -26,6 +28,7 @@ fun WebViewContainer(
     onPageStarted: () -> Unit,
     onProgress: (Int) -> Unit,
     onPageFinished: (String, String, String?) -> Unit,
+    onDownloadStart: (String, String?, String?, String?, Long) -> Unit,
 ) {
     val holder = remember { WebViewHolder() }
 
@@ -44,10 +47,8 @@ fun WebViewContainer(
                     mediaPlaybackRequiresUserGesture = false
                     useWideViewPort = true
                     loadWithOverviewMode = true
-                    userAgentString = if (isIncognito) {
-                        "$userAgentString NovaIncognito/1.0"
-                    } else {
-                        userAgentString
+                    if (isIncognito) {
+                        userAgentString = "$userAgentString NovaIncognito/1.0"
                     }
                 }
 
@@ -72,10 +73,19 @@ fun WebViewContainer(
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
+                        // Try to grab the favicon URL from the page
+                        val faviconUrl = url?.let { pageUrl ->
+                            try {
+                                val uri = java.net.URI(pageUrl)
+                                "${uri.scheme}://${uri.host}/favicon.ico"
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
                         onPageFinished(
                             url ?: "",
                             view?.title ?: "",
-                            null,
+                            faviconUrl,
                         )
                     }
                 }
@@ -84,7 +94,25 @@ fun WebViewContainer(
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
                         onProgress(newProgress)
                     }
+
+                    override fun onReceivedIcon(view: WebView?, icon: Bitmap?) {
+                        // Real favicon received
+                        view?.url?.let { pageUrl ->
+                            val uri = try { java.net.URI(pageUrl) } catch (_: Exception) { null }
+                            if (uri != null) {
+                                val faviconUrl = "${uri.scheme}://${uri.host}/favicon.ico"
+                                onPageFinished(pageUrl, view.title ?: "", faviconUrl)
+                            }
+                        }
+                    }
                 }
+
+                setDownloadListener(DownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+                    onDownloadStart(url, userAgent, contentDisposition, mimeType, contentLength)
+                })
+
+                CookieManager.getInstance().setAcceptCookie(true)
+                CookieManager.getInstance().setAcceptThirdPartyCookies(this, !isIncognito)
 
                 holder.webView = this
                 loadUrl(initialUrl)
