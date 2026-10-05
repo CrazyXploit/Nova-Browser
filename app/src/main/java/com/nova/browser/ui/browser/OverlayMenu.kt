@@ -8,26 +8,30 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -60,20 +64,31 @@ fun OverlayMenu(
         enter = fadeIn(tween(180)) + slideInVertically(initialOffsetY = { it }),
         exit = fadeOut(tween(150)) + slideOutVertically(targetOffsetY = { it }),
     ) {
+        // Respect system nav bar height
+        val navBarPadding = WindowInsets.navigationBars.asPaddingValues()
+        val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+        val menuWidth = (screenWidth - 32).coerceAtMost(400).dp
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f))
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f))
                 .clickable { onDismiss() },
             contentAlignment = Alignment.BottomCenter,
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(
+                        bottom = navBarPadding.calculateBottomPadding() + 16.dp,
+                        start = 16.dp,
+                        end = 16.dp,
+                    )
+                    .width(menuWidth)
+                    .heightIn(max = 480.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(MaterialTheme.colorScheme.surface)
-                    .clickable { /* consume clicks */ }
+                    .clickable { /* consume */ }
+                    .verticalScroll(rememberScrollState())
                     .padding(vertical = 12.dp),
             ) {
                 Text(
@@ -89,10 +104,10 @@ fun OverlayMenu(
                 ToggleItem(Icons.Default.Devices, "Desktop Mode", desktopMode, onToggleDesktop)
                 ToggleItem(Icons.Default.Visibility, "Incognito", isIncognito, onToggleIncognito)
 
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.size(4.dp))
 
                 ActionItem(Icons.Default.Language, "User Agent", onUserAgent)
-                ActionItem(Icons.Default.Language, "My IP Address", onMyIp)
+                ActionItem(Icons.Default.Public, "My IP Address", onMyIp)
             }
         }
     }
