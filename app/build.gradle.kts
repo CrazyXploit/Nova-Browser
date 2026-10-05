@@ -67,7 +67,6 @@ android {
     }
     buildFeatures { compose = true }
 
-    // Faster builds + smaller APKs
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         resources.excludes += "/META-INF/DEPENDENCIES"
@@ -106,4 +105,5 @@ dependencies {
     implementation(libs.coil.compose)
 
     implementation("androidx.profileinstaller:profileinstaller:1.4.0")
+    implementation("androidx.webkit:webkit:1.11.0")
 }
