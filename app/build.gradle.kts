@@ -32,13 +32,20 @@ android {
     }
 
     buildTypes {
+        debug {
+            isMinifyEnabled = false
+            isDebuggable = true
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            if (file(System.getenv("KEYSTORE_PATH") ?: "release.keystore").exists()) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            signingConfig = if (file(System.getenv("KEYSTORE_PATH") ?: "release.keystore").exists()) {
+                signingConfigs.getByName("release")
+            } else null
         }
     }
 
@@ -48,13 +55,14 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
-    packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+
+    packaging {
+        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
 }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
-
-implementation("io.coil-kt:coil-compose:2.7.0")
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
@@ -79,4 +87,7 @@ implementation("io.coil-kt:coil-compose:2.7.0")
     implementation(libs.datastore.preferences)
     implementation(libs.accompanist.webview)
     implementation(libs.coil.compose)
+
+    // Performance: Baseline Profile installer
+    implementation("androidx.profileinstaller:profileinstaller:1.4.0")
 }
