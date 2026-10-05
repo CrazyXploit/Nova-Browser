@@ -2,6 +2,7 @@ package com.nova.browser.data
 
 import android.webkit.WebResourceResponse
 import java.io.ByteArrayInputStream
+import java.util.concurrent.atomic.AtomicInteger
 
 object AdBlocker {
 
@@ -49,17 +50,9 @@ object AdBlocker {
     )
 
     private val blockedKeywords = arrayOf(
-        "/ads/",
-        "/ad/",
-        "/adserver/",
-        "/advert/",
-        "/banner/",
-        "/popup/",
-        "/tracking/",
-        "/tracker/",
-        "/analytics/",
-        "/pixel/",
-        "/beacon/",
+        "/ads/", "/ad/", "/adserver/", "/advert/",
+        "/banner/", "/popup/", "/tracking/", "/tracker/",
+        "/analytics/", "/pixel/", "/beacon/",
     )
 
     private val emptyResponse: WebResourceResponse by lazy {
@@ -70,22 +63,40 @@ object AdBlocker {
         )
     }
 
-    @Volatile
-    var enabled: Boolean = true
+    @Volatile var enabled: Boolean = true
+    @Volatile var trackersBlocked: Int = 0
+    @Volatile var adsBlocked: Int = 0
+
+    private val _trackerCount = AtomicInteger(0)
+    private val _adCount = AtomicInteger(0)
 
     fun shouldBlock(url: String?): Boolean {
         if (!enabled || url.isNullOrEmpty()) return false
-
-        // Fast path: check host in set
         val lower = url.lowercase()
+
         for (host in blockedHosts) {
-            if (lower.contains(host)) return true
+            if (lower.contains(host)) {
+                trackersBlocked = _trackerCount.incrementAndGet()
+                return true
+            }
         }
         for (kw in blockedKeywords) {
-            if (lower.contains(kw)) return true
+            if (lower.contains(kw)) {
+                adsBlocked = _adCount.incrementAndGet()
+                return true
+            }
         }
         return false
     }
 
     fun blockedResponse(): WebResourceResponse = emptyResponse
+
+    fun totalBlocked(): Int = _trackerCount.get() + _adCount.get()
+
+    fun resetCounters() {
+        _trackerCount.set(0)
+        _adCount.set(0)
+        trackersBlocked = 0
+        adsBlocked = 0
+    }
 }
