@@ -85,6 +85,7 @@ fun BrowserScreen(
                         adsBlocked = state.statsAds,
                         timeSavedMs = state.statsTimeSavedMs,
                         timeSpentMs = state.statsTimeSpentMs,
+                        dataSavedBytes = state.statsDataSavedBytes,
                         onSearch = vm.searchFromHome,
                     )
                 } else {
