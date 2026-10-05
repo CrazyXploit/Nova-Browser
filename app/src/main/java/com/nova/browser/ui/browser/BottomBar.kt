@@ -105,3 +105,12 @@ fun BottomBar(
                         onLongClick = onLongPressMore,
                     ),
                 contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Default.MoreHoriz, "More",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
+}
