@@ -63,6 +63,7 @@ fun UrlBar(
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Purely display — no input field, no focus issues
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -75,7 +76,10 @@ fun UrlBar(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = if (url.startsWith("https")) Icons.Default.Lock else Icons.Default.Language,
+                        imageVector = if (url.startsWith("https"))
+                            Icons.Default.Lock
+                        else
+                            Icons.Default.Language,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
                         tint = if (url.startsWith("https"))
@@ -107,18 +111,21 @@ fun UrlBar(
 
             Spacer(Modifier.width(4.dp))
 
-            // Bookmark button
             IconButton(onClick = onBookmarkClick, modifier = Modifier.size(40.dp)) {
                 Icon(
-                    imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                    imageVector = if (isBookmarked)
+                        Icons.Default.Bookmark
+                    else
+                        Icons.Default.BookmarkBorder,
                     contentDescription = "Bookmark",
-                    tint = if (isBookmarked) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurface,
+                    tint = if (isBookmarked)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(20.dp),
                 )
             }
 
-            // Tabs
             Box {
                 IconButton(onClick = onTabsClick, modifier = Modifier.size(40.dp)) {
                     Icon(
