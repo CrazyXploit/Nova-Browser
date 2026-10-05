@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -37,7 +38,7 @@ class WebViewHolder {
 fun WebViewContainer(
     initialUrl: String,
     isIncognito: Boolean,
-    desktopMode: Boolean,
+    userAgentMode: UserAgentManager.Mode,
     onPageStarted: () -> Unit,
     onProgress: (Int) -> Unit,
     onPageFinished: (String, String, String?) -> Unit,
@@ -50,141 +51,147 @@ fun WebViewContainer(
     val currentOnPageFinished by rememberUpdatedState(onPageFinished)
     val currentOnDownloadStart by rememberUpdatedState(onDownloadStart)
 
-    AndroidView(
-        modifier = Modifier.fillMaxSize(),
-        factory = { ctx ->
-            val assetLoader = WebViewAssetLoader.Builder()
-                .addPathHandler(
-                    "/files/",
-                    WebViewAssetLoader.InternalStoragePathHandler(ctx, ctx.filesDir),
-                )
-                .addPathHandler(
-                    "/assets/",
-                    WebViewAssetLoader.AssetsPathHandler(ctx),
-                )
-                .build()
+    // Recreate WebView when UA mode changes
+    key(userAgentMode, isIncognito) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                val assetLoader = WebViewAssetLoader.Builder()
+                    .addPathHandler(
+                        "/files/",
+                        WebViewAssetLoader.InternalStoragePathHandler(ctx, ctx.filesDir),
+                    )
+                    .addPathHandler(
+                        "/assets/",
+                        WebViewAssetLoader.AssetsPathHandler(ctx),
+                    )
+                    .build()
 
-            WebView(ctx).apply {
-                setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
-                isVerticalScrollBarEnabled = false
-                isHorizontalScrollBarEnabled = false
-                overScrollMode = WebView.OVER_SCROLL_NEVER
+                WebView(ctx).apply {
+                    setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
+                    isVerticalScrollBarEnabled = false
+                    isHorizontalScrollBarEnabled = false
+                    overScrollMode = WebView.OVER_SCROLL_NEVER
 
-                settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    databaseEnabled = true
-                    loadsImagesAutomatically = true
-                    setSupportZoom(false)
-                    builtInZoomControls = false
-                    displayZoomControls = false
-                    mediaPlaybackRequiresUserGesture = true
-                    useWideViewPort = true
-                    loadWithOverviewMode = true
-                    cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-                    allowFileAccess = false
-                    allowContentAccess = false
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) safeBrowsingEnabled = false
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        forceDark = WebSettings.FORCE_DARK_AUTO
+                    settings.apply {
+                        javaScriptEnabled = true
+                        domStorageEnabled = true
+                        databaseEnabled = true
+                        loadsImagesAutomatically = true
+                        setSupportZoom(false)
+                        builtInZoomControls = false
+                        displayZoomControls = false
+                        mediaPlaybackRequiresUserGesture = true
+                        useWideViewPort = true
+                        loadWithOverviewMode = true
+                        cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                        allowFileAccess = false
+                        allowContentAccess = false
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            safeBrowsingEnabled = false
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            forceDark = WebSettings.FORCE_DARK_AUTO
+                        }
+                        mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     }
-                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                }
 
-                // Apply UA
-                UserAgentManager.mode = if (desktopMode)
-                    UserAgentManager.Mode.DESKTOP else UserAgentManager.Mode.MOBILE
-                UserAgentManager.applyTo(settings)
-                if (isIncognito) {
-                    settings.userAgentString = "${settings.userAgentString} NovaIncognito/1.0"
-                }
+                    // Capture default then apply user choice
+                    UserAgentManager.captureDefault(settings)
+                    UserAgentManager.applyTo(settings)
+                    if (isIncognito) {
+                        settings.userAgentString =
+                            "${settings.userAgentString} NovaIncognito/1.0"
+                    }
 
-                webViewClient = object : WebViewClient() {
-                    override fun shouldInterceptRequest(
-                        view: WebView?,
-                        request: WebResourceRequest?,
-                    ): WebResourceResponse? {
-                        val uri = request?.url
-                        if (uri != null) {
-                            val intercepted = assetLoader.shouldInterceptRequest(uri)
-                            if (intercepted != null) {
-                                Log.d(TAG, "Served: $uri")
-                                return intercepted
+                    Log.d(TAG, "UA applied: ${settings.userAgentString}")
+
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldInterceptRequest(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                        ): WebResourceResponse? {
+                            val uri = request?.url
+                            if (uri != null) {
+                                val intercepted = assetLoader.shouldInterceptRequest(uri)
+                                if (intercepted != null) {
+                                    Log.d(TAG, "Served: $uri")
+                                    return intercepted
+                                }
+                                if (AdBlocker.shouldBlock(uri.toString())) {
+                                    return AdBlocker.blockedResponse()
+                                }
                             }
-                            if (AdBlocker.shouldBlock(uri.toString())) {
-                                return AdBlocker.blockedResponse()
+                            return super.shouldInterceptRequest(view, request)
+                        }
+
+                        override fun onPageStarted(
+                            view: WebView?, url: String?, favicon: Bitmap?,
+                        ) {
+                            currentOnPageStarted()
+                            injectEruda(view)
+                        }
+
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            injectEruda(view)
+                            val faviconUrl = url?.let { pageUrl ->
+                                try {
+                                    val uri = java.net.URI(pageUrl)
+                                    val host = uri.host ?: return@let null
+                                    "${uri.scheme ?: "https"}://$host/favicon.ico"
+                                } catch (_: Exception) { null }
                             }
+                            currentOnPageFinished(url ?: "", view?.title ?: "", faviconUrl)
                         }
-                        return super.shouldInterceptRequest(view, request)
                     }
 
-                    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                        currentOnPageStarted()
-                        injectEruda(view)
+                    webChromeClient = object : WebChromeClient() {
+                        override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                            currentOnProgress(newProgress)
+                        }
+                        override fun onConsoleMessage(c: ConsoleMessage?): Boolean {
+                            val msg = c?.message() ?: ""
+                            if (msg.contains("Nova:") || msg.contains("Eruda")) {
+                                Log.d(TAG, "[Nova] $msg")
+                            }
+                            return true
+                        }
                     }
 
-                    override fun onPageFinished(view: WebView?, url: String?) {
-                        injectEruda(view)
-                        val faviconUrl = url?.let { pageUrl ->
-                            try {
-                                val uri = java.net.URI(pageUrl)
-                                val host = uri.host ?: return@let null
-                                "${uri.scheme ?: "https"}://$host/favicon.ico"
-                            } catch (_: Exception) { null }
+                    setDownloadListener(
+                        DownloadListener { url, userAgent, cd, mime, len ->
+                            currentOnDownloadStart(url, userAgent, cd, mime, len)
                         }
-                        currentOnPageFinished(url ?: "", view?.title ?: "", faviconUrl)
-                    }
+                    )
+
+                    CookieManager.getInstance().setAcceptCookie(true)
+                    CookieManager.getInstance()
+                        .setAcceptThirdPartyCookies(this, !isIncognito)
+
+                    tag = initialUrl
+                    holder.webView = this
+                    loadUrl(initialUrl)
                 }
-
-                webChromeClient = object : WebChromeClient() {
-                    override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                        currentOnProgress(newProgress)
-                    }
-                    override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                        val msg = consoleMessage?.message() ?: ""
-                        if (msg.contains("Nova:") || msg.contains("Eruda")) {
-                            Log.d(TAG, "[Nova] $msg")
-                        }
-                        return true
-                    }
+            },
+            update = { wv ->
+                val lastUrl = wv.tag as? String
+                if (initialUrl.isNotBlank() &&
+                    lastUrl != initialUrl &&
+                    !initialUrl.startsWith("about:") &&
+                    !initialUrl.startsWith("data:")
+                ) {
+                    wv.tag = initialUrl
+                    wv.loadUrl(initialUrl)
                 }
-
-                setDownloadListener(
-                    DownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
-                        currentOnDownloadStart(url, userAgent, contentDisposition, mimeType, contentLength)
-                    }
-                )
-
-                CookieManager.getInstance().setAcceptCookie(true)
-                CookieManager.getInstance().setAcceptThirdPartyCookies(this, !isIncognito)
-
-                tag = initialUrl
-                holder.webView = this
-                loadUrl(initialUrl)
-            }
-        },
-        update = { wv ->
-            val lastUrl = wv.tag as? String
-            if (initialUrl.isNotBlank() &&
-                lastUrl != initialUrl &&
-                !initialUrl.startsWith("about:") &&
-                !initialUrl.startsWith("data:")
-            ) {
-                wv.tag = initialUrl
-                // Re-apply UA before loading
-                UserAgentManager.mode = if (desktopMode)
-                    UserAgentManager.Mode.DESKTOP else UserAgentManager.Mode.MOBILE
-                UserAgentManager.applyTo(wv.settings)
-                wv.loadUrl(initialUrl)
-            }
-        },
-        onRelease = { wv ->
-            wv.stopLoading()
-            wv.loadUrl("about:blank")
-            wv.destroy()
-            holder.webView = null
-        },
-    )
+            },
+            onRelease = { wv ->
+                wv.stopLoading()
+                wv.loadUrl("about:blank")
+                wv.destroy()
+                holder.webView = null
+            },
+        )
+    }
 
     DisposableEffect(Unit) {
         onDispose { holder.webView?.stopLoading() }
