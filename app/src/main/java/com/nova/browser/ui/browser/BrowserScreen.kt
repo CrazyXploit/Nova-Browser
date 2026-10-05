@@ -20,6 +20,7 @@ fun BrowserScreen(
     vm: BrowserViewModel = hiltViewModel(),
     onOpenBookmarks: () -> Unit = {},
     onOpenDownloads: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
 
@@ -43,7 +44,9 @@ fun BrowserScreen(
                     isBookmarked = state.isCurrentUrlBookmarked,
                     onBarClick = vm.openUrlPopup,
                     onBookmarkClick = vm.toggleBookmark,
-                    onRefreshClick = vm.reload,
+                    onRefreshClick = {
+                        if (state.isLoading) vm.stopLoading() else vm.reload()
+                    },
                     onShieldClick = vm.toggleSiteInfo,
                     onMoreClick = vm.toggleOverlayMenu,
                     onTabsClick = vm.toggleTabSwitcher,
@@ -82,13 +85,12 @@ fun BrowserScreen(
             }
         }
 
-        // URL popup — small popup above URL bar (top-aligned)
         UrlPopup(
             visible = state.showUrlPopup,
             url = state.urlInput,
             maximized = state.urlMaximized,
             onUrlChange = vm.onUrlInputChange,
-            onNavigate = { vm.navigate(state.urlInput) },
+            onNavigate = vm.navigateFromPopup,
             onRefresh = vm.reload,
             onToggleMaximize = vm.toggleUrlMaximize,
             onDismiss = vm.closeUrlPopup,
@@ -135,6 +137,18 @@ fun BrowserScreen(
         onMyIp = {
             vm.closeOverlayMenu()
             vm.openIpOverlay()
+        },
+        onHistory = {
+            vm.closeOverlayMenu()
+            onOpenHistory()
+        },
+        onBookmarks = {
+            vm.closeOverlayMenu()
+            onOpenBookmarks()
+        },
+        onDownloads = {
+            vm.closeOverlayMenu()
+            onOpenDownloads()
         },
         onDismiss = vm.closeOverlayMenu,
     )
