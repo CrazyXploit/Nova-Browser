@@ -1,11 +1,9 @@
 package com.nova.browser.ui.browser
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
 import android.util.Log
-import android.view.ContextMenu
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.DownloadListener
@@ -32,6 +30,7 @@ import com.nova.browser.data.ImageQualityManager
 import com.nova.browser.data.UserAgentManager
 
 private const val TAG = "NovaWebView"
+private const val HOME_PLACEHOLDER = "about:home"
 
 class WebViewHolder {
     var webView: WebView? = null
@@ -59,7 +58,6 @@ fun WebViewContainer(
     val currentOnDownloadStart by rememberUpdatedState(onDownloadStart)
     val currentOnWebViewCreated by rememberUpdatedState(onWebViewCreated)
 
-    // Apply UA + image quality in place when they change
     LaunchedEffect(userAgentMode) {
         val wv = holder.webView ?: return@LaunchedEffect
         UserAgentManager.applyTo(wv.settings)
@@ -69,8 +67,8 @@ fun WebViewContainer(
     }
 
     LaunchedEffect(imageQuality, dataSaver) {
-        val wv = holder.webView ?: return@LaunchedEffect
-        ImageQualityManager.applyTo(wv.settings)
+        val holderWV = holder.webView ?: return@LaunchedEffect
+        ImageQualityManager.applyTo(holderWV.settings)
     }
 
     AndroidView(
@@ -106,9 +104,7 @@ fun WebViewContainer(
                     cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
                     allowFileAccess = false
                     allowContentAccess = false
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        safeBrowsingEnabled = false
-                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) safeBrowsingEnabled = false
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         forceDark = WebSettings.FORCE_DARK_AUTO
                     }
@@ -122,8 +118,6 @@ fun WebViewContainer(
                 }
 
                 ImageQualityManager.applyTo(settings)
-
-                // Disable native context menu — we handle long-press ourselves
                 setOnCreateContextMenuListener(null)
 
                 webViewClient = object : WebViewClient() {
@@ -140,7 +134,6 @@ fun WebViewContainer(
                             return AdBlocker.blockedResponse()
                         }
 
-                        // Block images if quality = OFF
                         if (ImageQualityManager.shouldBlockImages()) {
                             val accept = request.requestHeaders["Accept"]
                             if (accept?.contains("image/") == true) {
@@ -153,11 +146,11 @@ fun WebViewContainer(
 
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         currentOnPageStarted()
-                        if (ErudaManager.enabled) injectEruda(view)
+                        if (ErudaManager.enabled && url != HOME_PLACEHOLDER) injectEruda(view)
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
-                        if (ErudaManager.enabled) injectEruda(view)
+                        if (ErudaManager.enabled && url != HOME_PLACEHOLDER) injectEruda(view)
                         val faviconUrl = url?.let { pageUrl ->
                             try {
                                 val uri = java.net.URI(pageUrl)
@@ -189,30 +182,36 @@ fun WebViewContainer(
                 )
 
                 CookieManager.getInstance().setAcceptCookie(true)
-                CookieManager.getInstance()
-                    .setAcceptThirdPartyCookies(this, !isIncognito)
+                CookieManager.getInstance().setAcceptThirdPartyCookies(this, !isIncognito)
 
                 tag = initialUrl
                 holder.webView = this
                 currentOnWebViewCreated(this)
 
-                // HTTPS enforcement
-                val target = if (HttpsEnforcer.enforceHttps)
-                    HttpsEnforcer.upgrade(initialUrl) else initialUrl
-                loadUrl(target)
+                // Load URL — if home placeholder, load blank (dashboard shown instead)
+                if (initialUrl == HOME_PLACEHOLDER || initialUrl.isBlank()) {
+                    loadUrl("about:blank")
+                } else {
+                    val target = if (HttpsEnforcer.enforceHttps)
+                        HttpsEnforcer.upgrade(initialUrl) else initialUrl
+                    loadUrl(target)
+                }
             }
         },
         update = { wv ->
             val lastUrl = wv.tag as? String
             if (initialUrl.isNotBlank() &&
                 lastUrl != initialUrl &&
-                !initialUrl.startsWith("about:") &&
                 !initialUrl.startsWith("data:")
             ) {
                 wv.tag = initialUrl
-                val target = if (HttpsEnforcer.enforceHttps)
-                    HttpsEnforcer.upgrade(initialUrl) else initialUrl
-                wv.loadUrl(target)
+                if (initialUrl == HOME_PLACEHOLDER) {
+                    wv.loadUrl("about:blank")
+                } else if (!initialUrl.startsWith("about:")) {
+                    val target = if (HttpsEnforcer.enforceHttps)
+                        HttpsEnforcer.upgrade(initialUrl) else initialUrl
+                    wv.loadUrl(target)
+                }
             }
         },
         onRelease = { wv ->
@@ -230,5 +229,11 @@ fun WebViewContainer(
 
 private fun injectEruda(view: WebView?) {
     if (view == null) return
-    view.evaluateJavascript(ErudaManager.buildInitScript(), null)
+    view.evaluateJs(ErudaManager.buildInitScript())
+}
+
+private fun WebView.evaluateJs(script: String) {
+    try {
+        evaluateJavascript(script, null)
+    } catch (_: Exception) { }
 }
