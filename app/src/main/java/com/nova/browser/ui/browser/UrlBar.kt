@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +46,7 @@ fun UrlBar(
     isBookmarked: Boolean,
     onBarClick: () -> Unit,
     onBookmarkClick: () -> Unit,
+    onRefreshClick: () -> Unit,
     onShieldClick: () -> Unit,
     onMoreClick: () -> Unit,
     onTabsClick: () -> Unit,
@@ -63,10 +65,10 @@ fun UrlBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 4.dp),
+                .padding(horizontal = 2.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onShieldClick, modifier = Modifier.size(40.dp)) {
+            IconButton(onClick = onShieldClick, modifier = Modifier.size(36.dp)) {
                 Icon(
                     imageVector = if (isSecure) Icons.Default.Shield else Icons.Default.Security,
                     contentDescription = "Site info",
@@ -88,8 +90,7 @@ fun UrlBar(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.Language,
-                        contentDescription = null,
+                        Icons.Default.Language, null,
                         modifier = Modifier.size(13.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -105,7 +106,7 @@ fun UrlBar(
                     )
                     if (loading) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(13.dp),
+                            modifier = Modifier.size(14.dp),
                             strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -115,7 +116,17 @@ fun UrlBar(
 
             Spacer(Modifier.width(2.dp))
 
-            IconButton(onClick = onBookmarkClick, modifier = Modifier.size(38.dp)) {
+            // Refresh button — always visible
+            IconButton(onClick = onRefreshClick, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Default.Refresh, "Refresh",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            // Bookmark button — always visible
+            IconButton(onClick = onBookmarkClick, modifier = Modifier.size(36.dp)) {
                 Icon(
                     imageVector = if (isBookmarked) Icons.Default.Bookmark
                     else Icons.Default.BookmarkBorder,
@@ -127,7 +138,7 @@ fun UrlBar(
             }
 
             Box {
-                IconButton(onClick = onTabsClick, modifier = Modifier.size(38.dp)) {
+                IconButton(onClick = onTabsClick, modifier = Modifier.size(36.dp)) {
                     Icon(
                         Icons.Default.Language, "Tabs",
                         tint = MaterialTheme.colorScheme.onSurface,
@@ -154,7 +165,7 @@ fun UrlBar(
                 }
             }
 
-            IconButton(onClick = onMoreClick, modifier = Modifier.size(38.dp)) {
+            IconButton(onClick = onMoreClick, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Default.MoreVert, "More",
                     tint = MaterialTheme.colorScheme.onSurface,
