@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.nova.browser.data.SearchEngineManager
+import com.nova.browser.data.UsageStats
 import com.nova.browser.data.UserAgentManager
 import com.nova.browser.ui.NovaApp
 import com.nova.browser.ui.theme.NovaTheme
@@ -19,8 +21,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Load persisted UA
         UserAgentManager.load(this)
+        SearchEngineManager.load(this)
+        UsageStats.load(this)
 
         setContent {
             NovaTheme {
@@ -32,5 +35,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        UsageStats.save(this)
     }
 }
