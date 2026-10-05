@@ -1,9 +1,11 @@
 package com.nova.browser.ui.browser
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
 import android.util.Log
+import android.view.ContextMenu
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.DownloadListener
@@ -25,6 +27,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
 import com.nova.browser.data.AdBlocker
 import com.nova.browser.data.ErudaManager
+import com.nova.browser.data.HttpsEnforcer
+import com.nova.browser.data.ImageQualityManager
 import com.nova.browser.data.UserAgentManager
 
 private const val TAG = "NovaWebView"
@@ -39,6 +43,8 @@ fun WebViewContainer(
     initialUrl: String,
     isIncognito: Boolean,
     userAgentMode: UserAgentManager.Mode,
+    imageQuality: ImageQualityManager.Quality,
+    dataSaver: Boolean,
     onPageStarted: () -> Unit,
     onProgress: (Int) -> Unit,
     onPageFinished: (String, String, String?) -> Unit,
@@ -53,14 +59,18 @@ fun WebViewContainer(
     val currentOnDownloadStart by rememberUpdatedState(onDownloadStart)
     val currentOnWebViewCreated by rememberUpdatedState(onWebViewCreated)
 
-    // Apply UA changes WITHOUT recreating the WebView
+    // Apply UA + image quality in place when they change
     LaunchedEffect(userAgentMode) {
         val wv = holder.webView ?: return@LaunchedEffect
         UserAgentManager.applyTo(wv.settings)
         if (isIncognito) {
             wv.settings.userAgentString = "${wv.settings.userAgentString} NovaIncognito/1.0"
         }
-        Log.d(TAG, "UA updated in place: ${wv.settings.userAgentString}")
+    }
+
+    LaunchedEffect(imageQuality, dataSaver) {
+        val wv = holder.webView ?: return@LaunchedEffect
+        ImageQualityManager.applyTo(wv.settings)
     }
 
     AndroidView(
@@ -87,7 +97,6 @@ fun WebViewContainer(
                     javaScriptEnabled = true
                     domStorageEnabled = true
                     databaseEnabled = true
-                    loadsImagesAutomatically = true
                     setSupportZoom(false)
                     builtInZoomControls = false
                     displayZoomControls = false
@@ -103,7 +112,7 @@ fun WebViewContainer(
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         forceDark = WebSettings.FORCE_DARK_AUTO
                     }
-                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                    mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                 }
 
                 UserAgentManager.captureDefault(settings)
@@ -112,19 +121,33 @@ fun WebViewContainer(
                     settings.userAgentString = "${settings.userAgentString} NovaIncognito/1.0"
                 }
 
+                ImageQualityManager.applyTo(settings)
+
+                // Disable native context menu — we handle long-press ourselves
+                setOnCreateContextMenuListener(null)
+
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(
                         view: WebView?,
                         request: WebResourceRequest?,
                     ): WebResourceResponse? {
-                        val uri = request?.url
-                        if (uri != null) {
-                            val intercepted = assetLoader.shouldInterceptRequest(uri)
-                            if (intercepted != null) return intercepted
-                            if (AdBlocker.shouldBlock(uri.toString())) {
+                        val uri = request?.url ?: return super.shouldInterceptRequest(view, request)
+
+                        val intercepted = assetLoader.shouldInterceptRequest(uri)
+                        if (intercepted != null) return intercepted
+
+                        if (AdBlocker.shouldBlock(uri.toString())) {
+                            return AdBlocker.blockedResponse()
+                        }
+
+                        // Block images if quality = OFF
+                        if (ImageQualityManager.shouldBlockImages()) {
+                            val accept = request.requestHeaders["Accept"]
+                            if (accept?.contains("image/") == true) {
                                 return AdBlocker.blockedResponse()
                             }
                         }
+
                         return super.shouldInterceptRequest(view, request)
                     }
 
@@ -172,7 +195,11 @@ fun WebViewContainer(
                 tag = initialUrl
                 holder.webView = this
                 currentOnWebViewCreated(this)
-                loadUrl(initialUrl)
+
+                // HTTPS enforcement
+                val target = if (HttpsEnforcer.enforceHttps)
+                    HttpsEnforcer.upgrade(initialUrl) else initialUrl
+                loadUrl(target)
             }
         },
         update = { wv ->
@@ -183,7 +210,9 @@ fun WebViewContainer(
                 !initialUrl.startsWith("data:")
             ) {
                 wv.tag = initialUrl
-                wv.loadUrl(initialUrl)
+                val target = if (HttpsEnforcer.enforceHttps)
+                    HttpsEnforcer.upgrade(initialUrl) else initialUrl
+                wv.loadUrl(target)
             }
         },
         onRelease = { wv ->
