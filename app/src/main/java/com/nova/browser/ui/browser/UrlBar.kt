@@ -14,10 +14,11 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,9 +41,10 @@ fun UrlBar(
     loading: Boolean,
     progress: Int,
     isIncognito: Boolean,
+    isBookmarked: Boolean,
     onBarClick: () -> Unit,
+    onBookmarkClick: () -> Unit,
     onMoreClick: () -> Unit,
-    onSettingsClick: () -> Unit,
     onTabsClick: () -> Unit,
     tabCount: Int,
 ) {
@@ -61,7 +63,6 @@ fun UrlBar(
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // URL bar — tap opens overlay
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -106,7 +107,18 @@ fun UrlBar(
 
             Spacer(Modifier.width(4.dp))
 
-            // Tabs counter
+            // Bookmark button
+            IconButton(onClick = onBookmarkClick, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                    contentDescription = "Bookmark",
+                    tint = if (isBookmarked) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            // Tabs
             Box {
                 IconButton(onClick = onTabsClick, modifier = Modifier.size(40.dp)) {
                     Icon(
@@ -140,14 +152,6 @@ fun UrlBar(
                 Icon(
                     Icons.Default.MoreVert,
                     contentDescription = "More",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-
-            IconButton(onClick = onSettingsClick, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    Icons.Default.Settings,
-                    contentDescription = "Settings",
                     tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
