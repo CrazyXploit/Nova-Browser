@@ -38,10 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,12 +47,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -75,19 +70,9 @@ fun UrlPopup(
     val statusBarPad = WindowInsets.statusBars.asPaddingValues()
     val topPad = statusBarPad.calculateTopPadding()
 
-    // Local edit state — keyed to url so it resets when tab/url changes externally
-    var fieldValue by remember(url) {
-        mutableStateOf(
-            TextFieldValue(
-                text = url,
-                selection = TextRange(0, url.length),
-            )
-        )
-    }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
-    // Request focus when popup opens or maximize toggles
     LaunchedEffect(visible, maximized) {
         focusRequester.requestFocus()
         keyboard?.show()
@@ -104,7 +89,7 @@ fun UrlPopup(
                 .fillMaxSize()
                 .imePadding(),
         ) {
-            // ── Background scrim that closes popup on tap ──
+            // Background scrim — tap to dismiss
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -118,7 +103,7 @@ fun UrlPopup(
                     }
             )
 
-            // ── Popup content (sits on top, doesn't inherit scrim click) ──
+            // Popup content — sits on top
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -140,11 +125,8 @@ fun UrlPopup(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         BasicTextField(
-                            value = fieldValue,
-                            onValueChange = {
-                                fieldValue = it
-                                onUrlChange(it.text)
-                            },
+                            value = url,
+                            onValueChange = onUrlChange,
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(
                                 color = Color.White,
@@ -249,11 +231,8 @@ fun UrlPopup(
                                 .padding(12.dp),
                         ) {
                             BasicTextField(
-                                value = fieldValue,
-                                onValueChange = {
-                                    fieldValue = it
-                                    onUrlChange(it.text)
-                                },
+                                value = url,
+                                onValueChange = onUrlChange,
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                                     color = Color.White,
                                     fontSize = 14.sp,
