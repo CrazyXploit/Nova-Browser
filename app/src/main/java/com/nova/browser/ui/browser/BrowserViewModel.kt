@@ -8,6 +8,7 @@ import com.nova.browser.data.BookmarkDao
 import com.nova.browser.data.BookmarkEntity
 import com.nova.browser.data.DownloadDao
 import com.nova.browser.data.DownloadEntity
+import com.nova.browser.data.ErudaInjector
 import com.nova.browser.data.HistoryDao
 import com.nova.browser.data.HistoryEntity
 import com.nova.browser.data.TabDao
@@ -25,6 +26,8 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 
+private const val HOME_URL = "https://www.google.com"
+
 data class BrowserUiState(
     val tabs: List<TabEntity> = emptyList(),
     val activeTabId: String? = null,
@@ -36,6 +39,7 @@ data class BrowserUiState(
     val showMoreTools: Boolean = false,
     val isIncognito: Boolean = false,
     val adBlockEnabled: Boolean = true,
+    val erudaEnabled: Boolean = true,
     val isCurrentUrlBookmarked: Boolean = false,
 ) {
     val activeTab: TabEntity? get() = tabs.firstOrNull { it.id == activeTabId }
@@ -53,7 +57,6 @@ class BrowserViewModel @Inject constructor(
     private val _state = MutableStateFlow(BrowserUiState())
     val state: StateFlow<BrowserUiState> = _state.asStateFlow()
 
-    // Lazy — only collects when a screen subscribes
     val history: StateFlow<List<HistoryEntity>> = historyDao.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -65,6 +68,7 @@ class BrowserViewModel @Inject constructor(
 
     init {
         AdBlocker.enabled = true
+        ErudaInjector.enabled = true
         viewModelScope.launch {
             tabDao.observeAll().collect { tabs ->
                 val current = _state.value
@@ -78,7 +82,7 @@ class BrowserViewModel @Inject constructor(
         }
         viewModelScope.launch {
             if (tabDao.observeAll().first().isEmpty()) {
-                createTab("https://duckduckgo.com")
+                createTab(HOME_URL)
             }
         }
     }
@@ -142,12 +146,21 @@ class BrowserViewModel @Inject constructor(
         _state.update { it.copy(adBlockEnabled = AdBlocker.enabled) }
     }
 
+    val toggleEruda: () -> Unit = {
+        ErudaInjector.enabled = !ErudaInjector.enabled
+        _state.update { it.copy(erudaEnabled = ErudaInjector.enabled) }
+    }
+
     val toggleIncognito: () -> Unit = {
         viewModelScope.launch {
             val incognito = !_state.value.isIncognito
             _state.update { it.copy(isIncognito = incognito) }
-            createTab("https://duckduckgo.com")
+            createTab(HOME_URL)
         }
+    }
+
+    val goHome: () -> Unit = {
+        navigate(HOME_URL)
     }
 
     // ── URL input ──────────────────────────────────────────
@@ -224,9 +237,9 @@ class BrowserViewModel @Inject constructor(
                 }
 
                 val bm = bookmarkDao.findByUrl(url)
-                val state = _state.value
-                if (state.isLoading || state.progress != 100 ||
-                    state.isCurrentUrlBookmarked != (bm != null)) {
+                val s = _state.value
+                if (s.isLoading || s.progress != 100 ||
+                    s.isCurrentUrlBookmarked != (bm != null)) {
                     _state.update {
                         it.copy(
                             isLoading = false,
