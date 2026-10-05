@@ -108,17 +108,20 @@ fun WebViewContainer(
                         view: WebView?,
                         request: WebResourceRequest?,
                     ): WebResourceResponse? {
-                        // Serve Eruda from local storage
-                        val intercepted = assetLoader.shouldInterceptRequest(request?.url)
-                        if (intercepted != null) {
-                            Log.d(TAG, "Served: ${request?.url}")
-                            return intercepted
-                        }
+                        val uri = request?.url
+                        if (uri != null) {
+                            // Serve Eruda from local storage
+                            val intercepted = assetLoader.shouldInterceptRequest(uri)
+                            if (intercepted != null) {
+                                Log.d(TAG, "Served: $uri")
+                                return intercepted
+                            }
 
-                        // Ad blocker
-                        val url = request?.url?.toString()
-                        if (AdBlocker.shouldBlock(url)) {
-                            return AdBlocker.blockedResponse()
+                            // Ad blocker
+                            val url = uri.toString()
+                            if (AdBlocker.shouldBlock(url)) {
+                                return AdBlocker.blockedResponse()
+                            }
                         }
 
                         return super.shouldInterceptRequest(view, request)
