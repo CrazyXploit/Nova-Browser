@@ -1,6 +1,8 @@
 package com.nova.browser.ui.browser
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -29,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun BottomBar(
     canGoBack: Boolean,
@@ -39,6 +42,7 @@ fun BottomBar(
     onHome: () -> Unit,
     onTabs: () -> Unit,
     onMore: () -> Unit,
+    onLongPressMore: () -> Unit,
 ) {
     Box(
         modifier = Modifier
@@ -56,37 +60,24 @@ fun BottomBar(
         ) {
             IconButton(onClick = onBack, enabled = canGoBack) {
                 Icon(
-                    Icons.Default.ArrowBack,
-                    contentDescription = "Back",
+                    Icons.Default.ArrowBack, "Back",
                     tint = if (canGoBack) MaterialTheme.colorScheme.onSurface
                     else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
                 )
             }
-
             IconButton(onClick = onForward, enabled = canGoForward) {
                 Icon(
-                    Icons.Default.ArrowForward,
-                    contentDescription = "Forward",
+                    Icons.Default.ArrowForward, "Forward",
                     tint = if (canGoForward) MaterialTheme.colorScheme.onSurface
                     else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
                 )
             }
-
             IconButton(onClick = onHome) {
-                Icon(
-                    Icons.Default.Home,
-                    contentDescription = "Home",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
+                Icon(Icons.Default.Home, "Home", tint = MaterialTheme.colorScheme.onSurface)
             }
-
             Box {
                 IconButton(onClick = onTabs) {
-                    Icon(
-                        Icons.Default.Tab,
-                        contentDescription = "Tabs",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
+                    Icon(Icons.Default.Tab, "Tabs", tint = MaterialTheme.colorScheme.onSurface)
                 }
                 if (tabCount > 0) {
                     Box(
@@ -99,22 +90,18 @@ fun BottomBar(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            tabCount.toString(),
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
+                            tabCount.toString(), color = Color.White,
+                            fontSize = 9.sp, fontWeight = FontWeight.Bold,
                         )
                     }
                 }
             }
-
-            IconButton(onClick = onMore) {
-                Icon(
-                    Icons.Default.MoreHoriz,
-                    contentDescription = "More",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-    }
-}
+            // Long-press opens overlay menu
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .combinedClickable(
+                        onClick = onMore,
+                        onLongClick = onLongPressMore,
+                    ),
+                contentAlignment = Alignment.Center,
