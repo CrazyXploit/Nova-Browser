@@ -26,7 +26,6 @@ import com.nova.browser.data.UsageStats
 import com.nova.browser.data.UserAgentManager
 import com.nova.browser.util.UrlUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -87,6 +86,7 @@ data class BrowserUiState(
     val statsAds: Int = 0,
     val statsTimeSavedMs: Long = 0,
     val statsTimeSpentMs: Long = 0,
+    val statsDataSavedBytes: Long = 0,
 ) {
     val activeTab: TabEntity? get() = tabs.firstOrNull { it.id == activeTabId }
 }
@@ -209,7 +209,6 @@ class BrowserViewModel @Inject constructor(
             if (tabDao.observeAll().first().isEmpty()) createTab(HOME_PLACEHOLDER)
         }
 
-        // Usage tracking
         sessionStartTime = SystemClock.elapsedRealtime()
         viewModelScope.launch {
             while (true) {
@@ -222,7 +221,6 @@ class BrowserViewModel @Inject constructor(
                 syncStatsToState()
             }
         }
-        // Fast sync for blocked counters
         viewModelScope.launch {
             while (true) {
                 delay(2_000)
@@ -240,6 +238,7 @@ class BrowserViewModel @Inject constructor(
                 statsAds = s.adsBlocked,
                 statsTimeSavedMs = s.timeSavedMs,
                 statsTimeSpentMs = s.totalTimeMs,
+                statsDataSavedBytes = s.dataSavedBytes,
                 trackersBlocked = s.trackersBlocked + s.adsBlocked,
             )
         }
@@ -542,8 +541,6 @@ class BrowserViewModel @Inject constructor(
     val onPageFinished: (String, String, String?) -> Unit = { url, title, favicon ->
         viewModelScope.launch {
             val id = _state.value.activeTabId ?: return@launch
-
-            // Skip home placeholder
             if (url == HOME_PLACEHOLDER || url.isBlank()) return@launch
 
             val existing = _state.value.tabs.firstOrNull { it.id == id }
@@ -645,7 +642,7 @@ class BrowserViewModel @Inject constructor(
         val isHome = url == HOME_PLACEHOLDER
         tabDao.upsert(
             TabEntity(
-                id = id, url = url, title = if (isHome) "New Tab" else "New Tab",
+                id = id, url = url, title = "New Tab",
                 faviconUrl = null, lastActive = System.currentTimeMillis(),
                 isIncognito = _state.value.isIncognito,
             )
@@ -662,7 +659,6 @@ class BrowserViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        // Save usage on exit
         val now = SystemClock.elapsedRealtime()
         val delta = now - sessionStartTime
         UsageStats.addSessionTime(delta)
