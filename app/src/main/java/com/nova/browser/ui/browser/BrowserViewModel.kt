@@ -34,7 +34,7 @@ private const val HOME_URL = "https://www.google.com"
 data class BrowserUiState(
     val tabs: List<TabEntity> = emptyList(),
     val activeTabId: String? = null,
-    val urlInput: String = "",              // ← what the popup is editing
+    val urlInput: String = "",
     val isLoading: Boolean = false,
     val progress: Int = 0,
     val showTabSwitcher: Boolean = false,
@@ -92,6 +92,9 @@ class BrowserViewModel @Inject constructor(
     }
     val reload: () -> Unit = {
         webViewRef?.reload()
+    }
+    val stopLoading: () -> Unit = {
+        webViewRef?.stopLoading()
     }
     val canGoBack: () -> Boolean = { webViewRef?.canGoBack() == true }
     val canGoForward: () -> Boolean = { webViewRef?.canGoForward() == true }
@@ -181,7 +184,6 @@ class BrowserViewModel @Inject constructor(
         _state.update { it.copy(urlMaximized = !it.urlMaximized) }
     }
 
-    // Called on every keystroke by BasicTextField — state stays in VM
     val onUrlInputChange: (String) -> Unit = { input ->
         _state.update { it.copy(urlInput = input) }
     }
@@ -213,7 +215,6 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
-    // Navigate using the current urlInput value (called by popup's Go button)
     val navigateFromPopup: () -> Unit = {
         navigate(_state.value.urlInput)
     }
@@ -339,7 +340,10 @@ class BrowserViewModel @Inject constructor(
                         isIncognito = _state.value.isIncognito,
                     )
                 )
-                if (!_state.value.isIncognito) {
+                // Only insert into history if the URL actually changed (avoid dupes)
+                if (!_state.value.isIncognito &&
+                    existing?.url != url
+                ) {
                     historyDao.insert(HistoryEntity(url = url, title = title))
                 }
             }
@@ -347,14 +351,14 @@ class BrowserViewModel @Inject constructor(
             val bm = bookmarkDao.findByUrl(url)
             val s = _state.value
             if (s.isLoading || s.progress != 100 ||
-                s.isCurrentUrlBookmarked != (bm != null)
+                s.isCurrentUrlBookmarked != (bm != null) ||
+                (!s.showUrlPopup && s.urlInput != url)
             ) {
                 _state.update {
                     it.copy(
                         isLoading = false,
                         progress = 100,
                         isCurrentUrlBookmarked = bm != null,
-                        // Only sync urlInput if popup is NOT open
                         urlInput = if (s.showUrlPopup) s.urlInput else url,
                     )
                 }
@@ -384,6 +388,11 @@ class BrowserViewModel @Inject constructor(
 
     val removeBookmark: (Long) -> Unit = { id ->
         viewModelScope.launch { bookmarkDao.delete(id) }
+    }
+
+    // ── History ────────────────────────────────────────────
+    val removeHistory: (Long) -> Unit = { id ->
+        viewModelScope.launch { historyDao.delete(id) }
     }
 
     val clearHistory: () -> Unit = {
