@@ -21,8 +21,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.webkit.WebViewAssetLoader
 import com.nova.browser.data.AdBlocker
-import com.nova.browser.data.ErudaInjector
+import com.nova.browser.data.ErudaManager
 
 private const val TAG = "NovaWebView"
 
@@ -50,6 +51,21 @@ fun WebViewContainer(
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { ctx ->
+            // Asset loader — serves downloaded Eruda from app's files/ folder
+            val assetLoader = WebViewAssetLoader.Builder()
+                .addPathHandler(
+                    "/files/",
+                    WebViewAssetLoader.InternalStoragePathHandler(
+                        ctx,
+                        ctx.filesDir,
+                    ),
+                )
+                .addPathHandler(
+                    "/assets/",
+                    WebViewAssetLoader.AssetsPathHandler(ctx),
+                )
+                .build()
+
             WebView(ctx).apply {
                 setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
                 isVerticalScrollBarEnabled = false
@@ -68,26 +84,18 @@ fun WebViewContainer(
                     useWideViewPort = true
                     loadWithOverviewMode = true
 
-                    // === LOW-END PERF: cache everything ===
                     cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-                    allowFileAccess = true                    // needed for file:///android_asset/
+                    allowFileAccess = false
                     allowContentAccess = false
-                    blockNetworkImage = false
-                    blockNetworkLoads = false
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        safeBrowsingEnabled = false               // save RAM
+                        safeBrowsingEnabled = false
                     }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         forceDark = WebSettings.FORCE_DARK_AUTO
                     }
 
-                    mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-
-                    // === LOW-END PERF: aggressive rendering ===
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                        offscreenPreRaster = false
-                    }
+                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 }
 
                 if (isIncognito) {
@@ -100,10 +108,19 @@ fun WebViewContainer(
                         view: WebView?,
                         request: WebResourceRequest?,
                     ): WebResourceResponse? {
+                        // Serve Eruda from local storage
+                        val intercepted = assetLoader.shouldInterceptRequest(request?.url)
+                        if (intercepted != null) {
+                            Log.d(TAG, "Served: ${request?.url}")
+                            return intercepted
+                        }
+
+                        // Ad blocker
                         val url = request?.url?.toString()
                         if (AdBlocker.shouldBlock(url)) {
                             return AdBlocker.blockedResponse()
                         }
+
                         return super.shouldInterceptRequest(view, request)
                     }
 
@@ -113,18 +130,18 @@ fun WebViewContainer(
                         favicon: Bitmap?,
                     ) {
                         currentOnPageStarted()
-                        if (ErudaInjector.enabled && view != null) {
+                        if (ErudaManager.enabled && view != null) {
                             view.evaluateJavascript(
-                                ErudaInjector.buildInitScript(),
+                                ErudaManager.buildInitScript(),
                                 null,
                             )
                         }
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
-                        if (ErudaInjector.enabled && view != null) {
+                        if (ErudaManager.enabled && view != null) {
                             view.evaluateJavascript(
-                                ErudaInjector.buildInitScript(),
+                                ErudaManager.buildInitScript(),
                                 null,
                             )
                         }
@@ -154,10 +171,12 @@ fun WebViewContainer(
                     override fun onConsoleMessage(
                         consoleMessage: ConsoleMessage?,
                     ): Boolean {
-                        Log.d(
-                            TAG,
-                            "[${consoleMessage?.messageLevel()}] ${consoleMessage?.message()}",
-                        )
+                        val msg = consoleMessage?.message() ?: ""
+                        if (msg.contains("Nova:") || msg.contains("Eruda")) {
+                            Log.d(TAG, "[Nova] $msg")
+                        } else {
+                            Log.d(TAG, "[${consoleMessage?.messageLevel()}] $msg")
+                        }
                         return true
                     }
                 }
