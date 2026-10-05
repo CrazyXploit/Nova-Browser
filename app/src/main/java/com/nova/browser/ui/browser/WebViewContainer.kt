@@ -20,6 +20,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.nova.browser.data.AdBlocker
+import com.nova.browser.data.ErudaInjector
 
 class WebViewHolder {
     var webView: WebView? = null
@@ -99,6 +100,10 @@ fun WebViewContainer(
                         favicon: Bitmap?,
                     ) {
                         currentOnPageStarted()
+                        // Inject Eruda EARLY — before the page's own JS runs
+                        if (ErudaInjector.enabled && view != null) {
+                            view.evaluateJavascript(ErudaInjector.buildInitScript(), null)
+                        }
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
@@ -122,6 +127,17 @@ fun WebViewContainer(
                 webChromeClient = object : WebChromeClient() {
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
                         currentOnProgress(newProgress)
+                    }
+
+                    override fun onConsoleMessage(
+                        consoleMessage: android.webkit.ConsoleMessage?,
+                    ): Boolean {
+                        // Forward JS console to Android logcat for debugging
+                        android.util.Log.d(
+                            "NovaConsole",
+                            "[${consoleMessage?.messageLevel()}] ${consoleMessage?.message()}",
+                        )
+                        return true
                     }
                 }
 
