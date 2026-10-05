@@ -13,9 +13,6 @@ import java.io.File
 
 object DownloadManagerHelper {
 
-    /**
-     * Enqueue download + return the DownloadManager ID.
-     */
     fun enqueue(
         context: Context,
         url: String,
@@ -41,14 +38,41 @@ object DownloadManagerHelper {
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         return try {
             dm.enqueue(request)
-        } catch (t: Throwable) {
-            -1L
+        } catch (_: Throwable) { -1L }
+    }
+
+    data class DownloadStatus(
+        val downloadedBytes: Long,
+        val totalBytes: Long,
+        val status: String,
+        val localUri: String?,
+    )
+
+    fun query(context: Context, id: Long): DownloadStatus? {
+        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val cursor = try {
+            dm.query(DownloadManager.Query().setFilterById(id))
+        } catch (_: Exception) { return null }
+
+        cursor.use { c ->
+            if (c == null || !c.moveToFirst()) return null
+            val downloaded = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+            val total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+            val statusInt = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+            val localUri = c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+
+            val statusText = when (statusInt) {
+                DownloadManager.STATUS_PENDING -> "QUEUED"
+                DownloadManager.STATUS_RUNNING -> "DOWNLOADING"
+                DownloadManager.STATUS_PAUSED -> "PAUSED"
+                DownloadManager.STATUS_SUCCESSFUL -> "COMPLETE"
+                DownloadManager.STATUS_FAILED -> "FAILED"
+                else -> "UNKNOWN"
+            }
+            return DownloadStatus(downloaded, total, statusText, localUri)
         }
     }
 
-    /**
-     * Open a downloaded file (from Downloads/ folder).
-     */
     fun openFile(context: Context, fileName: String) {
         try {
             val file = File(
@@ -70,7 +94,6 @@ object DownloadManagerHelper {
             }
             context.startActivity(intent)
         } catch (_: ActivityNotFoundException) {
-            // No app can open this file type — ignore silently
         } catch (_: Exception) {
         }
     }
