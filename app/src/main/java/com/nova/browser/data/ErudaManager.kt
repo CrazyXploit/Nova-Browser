@@ -8,46 +8,21 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-/**
- * Manages Eruda DevTools script.
- *
- * On first launch:
- *  - Downloads eruda.js from CDN
- *  - Saves to /data/data/com.nova.browser/files/eruda/eruda.js
- *
- * Subsequent launches:
- *  - Uses the local file (no download)
- *
- * If download fails, falls back to CDN loading.
- */
 object ErudaManager {
 
     private const val TAG = "ErudaManager"
-
-    // Where we save the file locally
     private const val ERUDA_DIR = "eruda"
     private const val ERUDA_FILE = "eruda.js"
-
-    // Where we download from
     private const val ERUDA_CDN_URL = "https://cdn.jsdelivr.net/npm/eruda@3.0.1/eruda.js"
 
-    // URL that WebViewAssetLoader will serve our local file from
-    const val ERUDA_LOCAL_URL = "https://appassets.androidplatform.net/files/eruda/eruda.js"
+    const val ERUDA_LOCAL_URL =
+        "https://appassets.androidplatform.net/files/eruda/eruda.js"
 
-    // Whether Eruda is enabled by user
-    @Volatile
-    var enabled: Boolean = true
-
-    // Whether Eruda script is downloaded and available locally
-    @Volatile
-    private var localReady: Boolean = false
+    @Volatile var enabled: Boolean = true
+    @Volatile private var localReady: Boolean = false
 
     val isLocalReady: Boolean get() = localReady
 
-    /**
-     * Call once at app startup. Downloads Eruda if not present.
-     * Safe to call multiple times — only downloads once.
-     */
     suspend fun ensureDownloaded(context: Context): Boolean = withContext(Dispatchers.IO) {
         try {
             val dir = File(context.filesDir, ERUDA_DIR)
@@ -55,14 +30,13 @@ object ErudaManager {
 
             val file = File(dir, ERUDA_FILE)
 
-            // Already downloaded and valid?
             if (file.exists() && file.length() > 10_000) {
-                Log.d(TAG, "Eruda already downloaded: ${file.length()} bytes")
+                Log.d(TAG, "Eruda ready: ${file.length()} bytes")
                 localReady = true
                 return@withContext true
             }
 
-            Log.d(TAG, "Downloading Eruda from $ERUDA_CDN_URL")
+            Log.d(TAG, "Downloading Eruda")
 
             val conn = (URL(ERUDA_CDN_URL).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
@@ -89,7 +63,6 @@ object ErudaManager {
             Log.d(TAG, "Eruda downloaded: $size bytes")
 
             if (size < 10_000) {
-                Log.e(TAG, "Downloaded file too small — deleting")
                 file.delete()
                 return@withContext false
             }
@@ -102,9 +75,6 @@ object ErudaManager {
         }
     }
 
-    /**
-     * Force re-download (for updates).
-     */
     suspend fun forceRedownload(context: Context): Boolean = withContext(Dispatchers.IO) {
         val file = File(File(context.filesDir, ERUDA_DIR), ERUDA_FILE)
         if (file.exists()) file.delete()
@@ -113,14 +83,22 @@ object ErudaManager {
     }
 
     /**
-     * Builds the JS injection script.
-     * Uses local file if ready, otherwise falls back to CDN.
+     * Robust injection script. Retries if Eruda's object isn't ready.
      */
     fun buildInitScript(): String {
         val srcUrl = if (localReady) ERUDA_LOCAL_URL else ERUDA_CDN_URL
         return """
             (function() {
-                if (window.__novaErudaLoaded) return;
+                if (window.__novaErudaLoaded) {
+                    // Already loading — check if it finished, show if not
+                    if (typeof eruda !== 'undefined' && window.__novaErudaInited !== true) {
+                        try {
+                            eruda.init({ defaults: { displaySize: 40, transparency: 0.9, theme: 'Dark' } });
+                            window.__novaErudaInited = true;
+                        } catch(e) {}
+                    }
+                    return;
+                }
 
                 if (location.href.startsWith('about:') ||
                     location.href.startsWith('data:') ||
@@ -130,35 +108,44 @@ object ErudaManager {
                 }
 
                 window.__novaErudaLoaded = true;
+                window.__novaErudaInited = false;
 
-                function runEruda() {
+                function initEruda() {
                     try {
                         if (typeof eruda === 'undefined') {
-                            console.log('Nova: eruda object missing after load');
+                            console.log('Nova: eruda missing, retry in 200ms');
+                            setTimeout(initEruda, 200);
                             return;
                         }
+                        if (window.__novaErudaInited) return;
                         eruda.init({
-                            defaults: {
-                                displaySize: 40,
-                                transparency: 0.9,
-                                theme: 'Dark'
-                            },
+                            defaults: { displaySize: 40, transparency: 0.9, theme: 'Dark' },
                             tool: ['console', 'elements', 'network', 'resources', 'info']
                         });
+                        window.__novaErudaInited = true;
                         eruda.show();
-                        console.log('Nova: Eruda loaded OK from $srcUrl');
-                    } catch (e) {
+                        console.log('Nova: Eruda loaded OK');
+                    } catch(e) {
                         console.log('Nova: Eruda init failed', e);
                     }
                 }
 
-                var script = document.createElement('script');
-                script.src = '$srcUrl';
-                script.onload = runEruda;
-                script.onerror = function() {
-                    console.log('Nova: Eruda failed to load from ' + script.src);
-                };
-                (document.head || document.documentElement).appendChild(script);
+                function loadScript() {
+                    var s = document.createElement('script');
+                    s.src = '$srcUrl';
+                    s.onload = initEruda;
+                    s.onerror = function() {
+                        console.log('Nova: Eruda script error, retrying via CDN');
+                        var s2 = document.createElement('script');
+                        s2.src = '$ERUDA_CDN_URL';
+                        s2.onload = initEruda;
+                        document.head.appendChild(s2);
+                    };
+                    (document.head || document.documentElement).appendChild(s);
+                }
+
+                if (document.head) loadScript();
+                else document.addEventListener('DOMContentLoaded', loadScript);
             })();
         """.trimIndent()
     }
