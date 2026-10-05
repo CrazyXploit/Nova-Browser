@@ -20,7 +20,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.BoltOutlined
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Icon
@@ -41,7 +41,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -177,7 +176,7 @@ fun HomeDashboard(
                 )
                 StatCard(
                     modifier = Modifier.weight(1f),
-                    icon = Icons.Default.BoltOutlined,
+                    icon = Icons.Default.Bolt,
                     label = "Saved",
                     value = formatTime(timeSavedMs),
                     subtitle = "load time",
