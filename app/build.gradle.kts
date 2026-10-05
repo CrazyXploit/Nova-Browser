@@ -17,6 +17,10 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         vectorDrawables.useSupportLibrary = true
+
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
 
     signingConfigs {
@@ -52,16 +56,29 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions {
+        jvmTarget = "17"
+        freeCompilerArgs += listOf(
+            "-Xjvm-default=all",
+            "-opt-in=kotlin.RequiresOptIn",
+        )
+    }
     buildFeatures { compose = true }
 
+    // Faster builds + smaller APKs
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        resources.excludes += "/META-INF/DEPENDENCIES"
+        resources.excludes += "/META-INF/LICENSE*"
+        resources.excludes += "/META-INF/NOTICE*"
     }
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.2")
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -88,6 +105,5 @@ dependencies {
     implementation(libs.accompanist.webview)
     implementation(libs.coil.compose)
 
-    // Performance: Baseline Profile installer
     implementation("androidx.profileinstaller:profileinstaller:1.4.0")
 }
