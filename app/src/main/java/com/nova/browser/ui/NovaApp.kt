@@ -11,8 +11,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.nova.browser.ui.bookmarks.BookmarksScreen
 import com.nova.browser.ui.browser.BrowserScreen
-import com.nova.browser.ui.browser.BrowserViewModel
 import com.nova.browser.ui.downloads.DownloadsScreen
+import com.nova.browser.ui.history.HistoryScreen
 
 @Composable
 fun NovaApp() {
@@ -24,45 +24,50 @@ fun NovaApp() {
         enterTransition = {
             slideInHorizontally(
                 initialOffsetX = { it },
-                animationSpec = tween(300),
-            ) + fadeIn(tween(300))
+                animationSpec = tween(250),
+            ) + fadeIn(tween(250))
         },
         exitTransition = {
             slideOutHorizontally(
                 targetOffsetX = { -it / 4 },
-                animationSpec = tween(300),
-            ) + fadeOut(tween(300))
+                animationSpec = tween(250),
+            ) + fadeOut(tween(250))
         },
         popEnterTransition = {
             slideInHorizontally(
                 initialOffsetX = { -it / 4 },
-                animationSpec = tween(300),
-            ) + fadeIn(tween(300))
+                animationSpec = tween(250),
+            ) + fadeIn(tween(250))
         },
         popExitTransition = {
             slideOutHorizontally(
                 targetOffsetX = { it },
-                animationSpec = tween(300),
-            ) + fadeOut(tween(300))
+                animationSpec = tween(250),
+            ) + fadeOut(tween(250))
         },
     ) {
         composable("browser") {
             BrowserScreen(
                 onOpenBookmarks = { nav.navigate("bookmarks") },
                 onOpenDownloads = { nav.navigate("downloads") },
+                onOpenHistory = { nav.navigate("history") },
             )
         }
         composable("bookmarks") {
             BookmarksScreen(
                 onBack = { nav.popBackStack() },
-                onOpenUrl = { url ->
-                    // Not needed — the browser opens on next composition
-                },
+                onOpenUrl = { },
             )
         }
         composable("downloads") {
             DownloadsScreen(
                 onBack = { nav.popBackStack() },
+            )
+        }
+        composable("history") {
+            HistoryScreen(
+                onBack = { nav.popBackStack() },
+                onOpenUrl = { url -> nav.navigate("browser") },
             )
         }
     }
