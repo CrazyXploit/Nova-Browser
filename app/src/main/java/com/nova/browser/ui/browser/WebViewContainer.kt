@@ -24,6 +24,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
 import com.nova.browser.data.AdBlocker
 import com.nova.browser.data.ErudaManager
+import com.nova.browser.data.UserAgentManager
 
 private const val TAG = "NovaWebView"
 
@@ -36,6 +37,7 @@ class WebViewHolder {
 fun WebViewContainer(
     initialUrl: String,
     isIncognito: Boolean,
+    desktopMode: Boolean,
     onPageStarted: () -> Unit,
     onProgress: (Int) -> Unit,
     onPageFinished: (String, String, String?) -> Unit,
@@ -51,14 +53,10 @@ fun WebViewContainer(
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { ctx ->
-            // Asset loader — serves downloaded Eruda from app's files/ folder
             val assetLoader = WebViewAssetLoader.Builder()
                 .addPathHandler(
                     "/files/",
-                    WebViewAssetLoader.InternalStoragePathHandler(
-                        ctx,
-                        ctx.filesDir,
-                    ),
+                    WebViewAssetLoader.InternalStoragePathHandler(ctx, ctx.filesDir),
                 )
                 .addPathHandler(
                     "/assets/",
@@ -83,24 +81,22 @@ fun WebViewContainer(
                     mediaPlaybackRequiresUserGesture = true
                     useWideViewPort = true
                     loadWithOverviewMode = true
-
                     cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
                     allowFileAccess = false
                     allowContentAccess = false
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        safeBrowsingEnabled = false
-                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) safeBrowsingEnabled = false
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         forceDark = WebSettings.FORCE_DARK_AUTO
                     }
-
                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 }
 
+                // Apply UA
+                UserAgentManager.mode = if (desktopMode)
+                    UserAgentManager.Mode.DESKTOP else UserAgentManager.Mode.MOBILE
+                UserAgentManager.applyTo(settings)
                 if (isIncognito) {
-                    val baseUa = settings.userAgentString ?: ""
-                    settings.userAgentString = "$baseUa NovaIncognito/1.0"
+                    settings.userAgentString = "${settings.userAgentString} NovaIncognito/1.0"
                 }
 
                 webViewClient = object : WebViewClient() {
@@ -110,59 +106,33 @@ fun WebViewContainer(
                     ): WebResourceResponse? {
                         val uri = request?.url
                         if (uri != null) {
-                            // Serve Eruda from local storage
                             val intercepted = assetLoader.shouldInterceptRequest(uri)
                             if (intercepted != null) {
                                 Log.d(TAG, "Served: $uri")
                                 return intercepted
                             }
-
-                            // Ad blocker
-                            val url = uri.toString()
-                            if (AdBlocker.shouldBlock(url)) {
+                            if (AdBlocker.shouldBlock(uri.toString())) {
                                 return AdBlocker.blockedResponse()
                             }
                         }
-
                         return super.shouldInterceptRequest(view, request)
                     }
 
-                    override fun onPageStarted(
-                        view: WebView?,
-                        url: String?,
-                        favicon: Bitmap?,
-                    ) {
+                    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         currentOnPageStarted()
-                        if (ErudaManager.enabled && view != null) {
-                            view.evaluateJavascript(
-                                ErudaManager.buildInitScript(),
-                                null,
-                            )
-                        }
+                        injectEruda(view)
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
-                        if (ErudaManager.enabled && view != null) {
-                            view.evaluateJavascript(
-                                ErudaManager.buildInitScript(),
-                                null,
-                            )
-                        }
-
+                        injectEruda(view)
                         val faviconUrl = url?.let { pageUrl ->
                             try {
                                 val uri = java.net.URI(pageUrl)
                                 val host = uri.host ?: return@let null
                                 "${uri.scheme ?: "https"}://$host/favicon.ico"
-                            } catch (_: Exception) {
-                                null
-                            }
+                            } catch (_: Exception) { null }
                         }
-                        currentOnPageFinished(
-                            url ?: "",
-                            view?.title ?: "",
-                            faviconUrl,
-                        )
+                        currentOnPageFinished(url ?: "", view?.title ?: "", faviconUrl)
                     }
                 }
 
@@ -170,15 +140,10 @@ fun WebViewContainer(
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
                         currentOnProgress(newProgress)
                     }
-
-                    override fun onConsoleMessage(
-                        consoleMessage: ConsoleMessage?,
-                    ): Boolean {
+                    override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                         val msg = consoleMessage?.message() ?: ""
                         if (msg.contains("Nova:") || msg.contains("Eruda")) {
                             Log.d(TAG, "[Nova] $msg")
-                        } else {
-                            Log.d(TAG, "[${consoleMessage?.messageLevel()}] $msg")
                         }
                         return true
                     }
@@ -186,19 +151,12 @@ fun WebViewContainer(
 
                 setDownloadListener(
                     DownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
-                        currentOnDownloadStart(
-                            url,
-                            userAgent,
-                            contentDisposition,
-                            mimeType,
-                            contentLength,
-                        )
+                        currentOnDownloadStart(url, userAgent, contentDisposition, mimeType, contentLength)
                     }
                 )
 
                 CookieManager.getInstance().setAcceptCookie(true)
-                CookieManager.getInstance()
-                    .setAcceptThirdPartyCookies(this, !isIncognito)
+                CookieManager.getInstance().setAcceptThirdPartyCookies(this, !isIncognito)
 
                 tag = initialUrl
                 holder.webView = this
@@ -213,6 +171,10 @@ fun WebViewContainer(
                 !initialUrl.startsWith("data:")
             ) {
                 wv.tag = initialUrl
+                // Re-apply UA before loading
+                UserAgentManager.mode = if (desktopMode)
+                    UserAgentManager.Mode.DESKTOP else UserAgentManager.Mode.MOBILE
+                UserAgentManager.applyTo(wv.settings)
                 wv.loadUrl(initialUrl)
             }
         },
@@ -225,8 +187,11 @@ fun WebViewContainer(
     )
 
     DisposableEffect(Unit) {
-        onDispose {
-            holder.webView?.stopLoading()
-        }
+        onDispose { holder.webView?.stopLoading() }
     }
+}
+
+private fun injectEruda(view: WebView?) {
+    if (!ErudaManager.enabled || view == null) return
+    view.evaluateJavascript(ErudaManager.buildInitScript(), null)
 }
