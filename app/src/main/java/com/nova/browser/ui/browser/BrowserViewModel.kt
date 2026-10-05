@@ -310,7 +310,7 @@ class BrowserViewModel @Inject constructor(
         _state.update { it.copy(longPressTarget = null) }
     }
 
-    // FIX: use updateQuality/updateDataSaver (renamed)
+    // Use the renamed functions from ImageQualityManager
     val setImageQuality: (ImageQualityManager.Quality) -> Unit = { q ->
         ImageQualityManager.updateQuality(q)
         ImageQualityManager.save(getApplication())
