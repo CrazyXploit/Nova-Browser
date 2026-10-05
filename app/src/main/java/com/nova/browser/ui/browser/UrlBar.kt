@@ -63,12 +63,11 @@ fun UrlBar(
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Purely display — no input field, no focus issues
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(44.dp)
-                    .clip(RoundedCornerShape(22.dp))
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(21.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable { onBarClick() }
                     .padding(horizontal = 14.dp),
@@ -89,7 +88,7 @@ fun UrlBar(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = url.ifBlank { "Search or type URL" },
+                        text = url.ifBlank { "Search Google or type URL" },
                         color = if (url.isBlank())
                             MaterialTheme.colorScheme.onSurfaceVariant
                         else
@@ -111,7 +110,7 @@ fun UrlBar(
 
             Spacer(Modifier.width(4.dp))
 
-            IconButton(onClick = onBookmarkClick, modifier = Modifier.size(40.dp)) {
+            IconButton(onClick = onBookmarkClick, modifier = Modifier.size(38.dp)) {
                 Icon(
                     imageVector = if (isBookmarked)
                         Icons.Default.Bookmark
@@ -127,7 +126,7 @@ fun UrlBar(
             }
 
             Box {
-                IconButton(onClick = onTabsClick, modifier = Modifier.size(40.dp)) {
+                IconButton(onClick = onTabsClick, modifier = Modifier.size(38.dp)) {
                     Icon(
                         Icons.Default.Language,
                         contentDescription = "Tabs",
@@ -155,11 +154,12 @@ fun UrlBar(
                 }
             }
 
-            IconButton(onClick = onMoreClick, modifier = Modifier.size(40.dp)) {
+            IconButton(onClick = onMoreClick, modifier = Modifier.size(38.dp)) {
                 Icon(
                     Icons.Default.MoreVert,
                     contentDescription = "More",
                     tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }
