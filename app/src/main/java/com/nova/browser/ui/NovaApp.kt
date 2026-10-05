@@ -9,11 +9,15 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.nova.browser.ui.bookmarks.BookmarksScreen
 import com.nova.browser.ui.browser.BrowserScreen
+import com.nova.browser.ui.browser.BrowserViewModel
+import com.nova.browser.ui.downloads.DownloadsScreen
 
 @Composable
 fun NovaApp() {
     val nav = rememberNavController()
+
     NavHost(
         navController = nav,
         startDestination = "browser",
@@ -42,6 +46,24 @@ fun NovaApp() {
             ) + fadeOut(tween(300))
         },
     ) {
-        composable("browser") { BrowserScreen() }
+        composable("browser") {
+            BrowserScreen(
+                onOpenBookmarks = { nav.navigate("bookmarks") },
+                onOpenDownloads = { nav.navigate("downloads") },
+            )
+        }
+        composable("bookmarks") {
+            BookmarksScreen(
+                onBack = { nav.popBackStack() },
+                onOpenUrl = { url ->
+                    // Not needed — the browser opens on next composition
+                },
+            )
+        }
+        composable("downloads") {
+            DownloadsScreen(
+                onBack = { nav.popBackStack() },
+            )
+        }
     }
 }
