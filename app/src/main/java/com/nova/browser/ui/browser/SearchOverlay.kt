@@ -40,7 +40,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -79,7 +78,6 @@ fun SearchOverlay(
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding(),
     ) {
-        // Top search bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -106,7 +104,7 @@ fun SearchOverlay(
                     Box(Modifier.weight(1f)) {
                         if (query.isBlank()) {
                             Text(
-                                text = "Search or type URL",
+                                text = "Search Google or type URL",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 14.sp,
                             )
@@ -142,7 +140,6 @@ fun SearchOverlay(
 
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
 
-        // History header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
