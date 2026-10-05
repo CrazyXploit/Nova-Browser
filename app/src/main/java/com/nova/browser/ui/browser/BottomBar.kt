@@ -49,8 +49,8 @@ fun BottomBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
-                .padding(horizontal = 8.dp),
+                .height(52.dp)
+                .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
@@ -80,7 +80,6 @@ fun BottomBar(
                 )
             }
 
-            // Tabs with badge
             Box {
                 IconButton(onClick = onTabs) {
                     Icon(
