@@ -8,7 +8,7 @@ import com.nova.browser.data.BookmarkDao
 import com.nova.browser.data.BookmarkEntity
 import com.nova.browser.data.DownloadDao
 import com.nova.browser.data.DownloadEntity
-import com.nova.browser.data.ErudaInjector
+import com.nova.browser.data.ErudaManager
 import com.nova.browser.data.HistoryDao
 import com.nova.browser.data.HistoryEntity
 import com.nova.browser.data.TabDao
@@ -40,6 +40,7 @@ data class BrowserUiState(
     val isIncognito: Boolean = false,
     val adBlockEnabled: Boolean = true,
     val erudaEnabled: Boolean = true,
+    val erudaReady: Boolean = false,
     val isCurrentUrlBookmarked: Boolean = false,
 ) {
     val activeTab: TabEntity? get() = tabs.firstOrNull { it.id == activeTabId }
@@ -68,7 +69,15 @@ class BrowserViewModel @Inject constructor(
 
     init {
         AdBlocker.enabled = true
-        ErudaInjector.enabled = true
+        ErudaManager.enabled = true
+
+        // === Eruda one-time download ===
+        viewModelScope.launch {
+            val ctx = getApplication<Application>()
+            val ok = ErudaManager.ensureDownloaded(ctx)
+            _state.update { it.copy(erudaReady = ok) }
+        }
+
         viewModelScope.launch {
             tabDao.observeAll().collect { tabs ->
                 val current = _state.value
@@ -147,8 +156,8 @@ class BrowserViewModel @Inject constructor(
     }
 
     val toggleEruda: () -> Unit = {
-        ErudaInjector.enabled = !ErudaInjector.enabled
-        _state.update { it.copy(erudaEnabled = ErudaInjector.enabled) }
+        ErudaManager.enabled = !ErudaManager.enabled
+        _state.update { it.copy(erudaEnabled = ErudaManager.enabled) }
     }
 
     val toggleIncognito: () -> Unit = {
@@ -161,6 +170,14 @@ class BrowserViewModel @Inject constructor(
 
     val goHome: () -> Unit = {
         navigate(HOME_URL)
+    }
+
+    val redownloadEruda: () -> Unit = {
+        viewModelScope.launch {
+            val ctx = getApplication<Application>()
+            val ok = ErudaManager.forceRedownload(ctx)
+            _state.update { it.copy(erudaReady = ok) }
+        }
     }
 
     // ── URL input ──────────────────────────────────────────
