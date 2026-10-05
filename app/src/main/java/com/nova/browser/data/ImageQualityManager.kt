@@ -33,18 +33,16 @@ object ImageQualityManager {
             .apply()
     }
 
-    fun updateQuality(q: Quality) {
-        quality = q
-    }
-
-    fun updateDataSaver(enabled: Boolean) {
-        dataSaver = enabled
-    }
+    fun updateQuality(q: Quality) { quality = q }
+    fun updateDataSaver(enabled: Boolean) { dataSaver = enabled }
 
     fun effectiveQuality(): Quality = if (dataSaver) Quality.LOW else quality
 
     fun shouldBlockImages(): Boolean = effectiveQuality() == Quality.OFF
 
+    /**
+     * Extra headers added to every WebView request via shouldInterceptRequest.
+     */
     fun extraHeaders(): Map<String, String> {
         val headers = mutableMapOf<String, String>()
         if (dataSaver) {
@@ -54,10 +52,12 @@ object ImageQualityManager {
         when (effectiveQuality()) {
             Quality.LOW -> {
                 headers["DPR"] = "1"
-                headers["Viewport-Width"] = "412"
+                headers["Viewport-Width"] = "360"
+                headers["Width"] = "360"
             }
             Quality.MEDIUM -> {
                 headers["DPR"] = "1.5"
+                headers["Viewport-Width"] = "412"
             }
             Quality.HIGH -> { }
             Quality.OFF -> {
