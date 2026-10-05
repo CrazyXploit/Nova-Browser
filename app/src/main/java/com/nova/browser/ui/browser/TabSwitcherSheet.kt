@@ -43,12 +43,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.nova.browser.data.TabEntity
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,7 +60,6 @@ fun TabSwitcherSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -70,9 +67,7 @@ fun TabSwitcherSheet(
         dragHandle = { BottomSheetDefaults.DragHandle() },
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -120,7 +115,6 @@ private fun TabCard(
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label = "scale",
     )
-
     Box(
         modifier = Modifier
             .aspectRatio(0.85f)
@@ -139,9 +133,7 @@ private fun TabCard(
     ) {
         if (active) {
             Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(3.dp)
+                Modifier.fillMaxWidth().height(3.dp)
                     .clip(RoundedCornerShape(2.dp))
                     .background(
                         Brush.horizontalGradient(
@@ -153,39 +145,20 @@ private fun TabCard(
                     )
             )
         }
-
         Column(Modifier.fillMaxSize()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Favicon
-                if (!tab.faviconUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = tab.faviconUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
-                        contentScale = ContentScale.Crop,
+                Box(
+                    Modifier.size(28.dp).clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.Language, null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
                     )
-                } else {
-                    Box(
-                        Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Default.Language,
-                            null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
                 }
-
                 Spacer(Modifier.width(8.dp))
-
                 Text(
                     tab.title.ifBlank { "New Tab" },
                     maxLines = 2,
@@ -195,19 +168,15 @@ private fun TabCard(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
-
                 IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
                     Icon(
-                        Icons.Default.Close,
-                        "Close",
+                        Icons.Default.Close, "Close",
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-
             Spacer(Modifier.weight(1f))
-
             Text(
                 tab.url,
                 maxLines = 1,
