@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
+private const val HOME_URL = "https://www.google.com"
+
 @Composable
 fun BrowserScreen(
     vm: BrowserViewModel = hiltViewModel(),
@@ -79,7 +81,7 @@ fun BrowserScreen(
                         canGoBack = webViewRef.value?.canGoBack() == true
                         canGoForward = webViewRef.value?.canGoForward() == true
                     },
-                    onHome = { vm.navigate("https://duckduckgo.com") },
+                    onHome = { vm.goHome() },
                     onTabs = vm.toggleTabSwitcher,
                     onMore = vm.toggleMoreTools,
                 )
@@ -119,7 +121,7 @@ fun BrowserScreen(
             activeId = state.activeTabId,
             onSelect = vm.selectTab,
             onClose = vm.closeTab,
-            onNew = { vm.newTab("https://duckduckgo.com") },
+            onNew = { vm.newTab(HOME_URL) },
             onDismiss = vm.toggleTabSwitcher,
         )
     }
@@ -127,8 +129,10 @@ fun BrowserScreen(
     if (state.showMoreTools) {
         MoreToolsSheet(
             adBlockEnabled = state.adBlockEnabled,
+            erudaEnabled = state.erudaEnabled,
             isIncognito = state.isIncognito,
             onToggleAdBlock = vm.toggleAdBlock,
+            onToggleEruda = vm.toggleEruda,
             onToggleIncognito = vm.toggleIncognito,
             onBookmarks = {
                 vm.toggleMoreTools()
