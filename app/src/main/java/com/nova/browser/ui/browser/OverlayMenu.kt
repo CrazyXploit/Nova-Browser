@@ -1,0 +1,149 @@
+package com.nova.browser.ui.browser
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+@Composable
+fun OverlayMenu(
+    visible: Boolean,
+    adBlockEnabled: Boolean,
+    erudaEnabled: Boolean,
+    desktopMode: Boolean,
+    isIncognito: Boolean,
+    onToggleAdBlock: () -> Unit,
+    onToggleEruda: () -> Unit,
+    onToggleDesktop: () -> Unit,
+    onToggleIncognito: () -> Unit,
+    onUserAgent: () -> Unit,
+    onMyIp: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(180)) + slideInVertically(initialOffsetY = { it }),
+        exit = fadeOut(tween(150)) + slideOutVertically(targetOffsetY = { it }),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f))
+                .clickable { onDismiss() },
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable { /* consume clicks */ }
+                    .padding(vertical = 12.dp),
+            ) {
+                Text(
+                    "Quick Tools",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+
+                ToggleItem(Icons.Default.Block, "Ad Blocker", adBlockEnabled, onToggleAdBlock)
+                ToggleItem(Icons.Default.Code, "Eruda DevTools", erudaEnabled, onToggleEruda)
+                ToggleItem(Icons.Default.Devices, "Desktop Mode", desktopMode, onToggleDesktop)
+                ToggleItem(Icons.Default.Visibility, "Incognito", isIncognito, onToggleIncognito)
+
+                Spacer(Modifier.height(4.dp))
+
+                ActionItem(Icons.Default.Language, "User Agent", onUserAgent)
+                ActionItem(Icons.Default.Language, "My IP Address", onMyIp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToggleItem(
+    icon: ImageVector,
+    label: String,
+    checked: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle() }
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(14.dp))
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 15.sp,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = checked, onCheckedChange = { onToggle() })
+    }
+}
+
+@Composable
+private fun ActionItem(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(14.dp))
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 15.sp,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
