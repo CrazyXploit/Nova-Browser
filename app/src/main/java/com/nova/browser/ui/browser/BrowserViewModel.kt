@@ -53,14 +53,15 @@ class BrowserViewModel @Inject constructor(
     private val _state = MutableStateFlow(BrowserUiState())
     val state: StateFlow<BrowserUiState> = _state.asStateFlow()
 
+    // Lazy — only collects when a screen subscribes
     val history: StateFlow<List<HistoryEntity>> = historyDao.observeAll()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val bookmarks: StateFlow<List<BookmarkEntity>> = bookmarkDao.observeAll()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val downloads: StateFlow<List<DownloadEntity>> = downloadDao.observeAll()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         AdBlocker.enabled = true
@@ -70,7 +71,9 @@ class BrowserViewModel @Inject constructor(
                 val active = current.activeTabId
                     ?.takeIf { id -> tabs.any { it.id == id } }
                     ?: tabs.firstOrNull()?.id
-                _state.update { it.copy(tabs = tabs, activeTabId = active) }
+                if (current.tabs != tabs || current.activeTabId != active) {
+                    _state.update { it.copy(tabs = tabs, activeTabId = active) }
+                }
             }
         }
         viewModelScope.launch {
@@ -120,14 +123,9 @@ class BrowserViewModel @Inject constructor(
         _state.update { it.copy(showTabSwitcher = !it.showTabSwitcher) }
     }
 
-    // FIX: Open overlay with EMPTY input and keep it open
-    // (do not auto-close on page load)
     val openSearchOverlay: () -> Unit = {
         _state.update {
-            it.copy(
-                showSearchOverlay = true,
-                urlInput = "",  // clean slate each time
-            )
+            it.copy(showSearchOverlay = true, urlInput = "")
         }
     }
 
@@ -185,13 +183,16 @@ class BrowserViewModel @Inject constructor(
 
     // ── Page events ────────────────────────────────────────
     val onPageStarted: () -> Unit = {
-        _state.update { it.copy(isLoading = true) }
+        if (!_state.value.isLoading) {
+            _state.update { it.copy(isLoading = true) }
+        }
     }
 
     val onProgress: (Int) -> Unit = { p ->
-        // Only update every 10% to reduce recomposition churn
-        val rounded = (p / 10) * 10
-        if (rounded != _state.value.progress / 10 * 10 || p >= 100) {
+        val current = _state.value.progress
+        val currentBucket = current / 10
+        val newBucket = p / 10
+        if (currentBucket != newBucket || p == 100) {
             _state.update { it.copy(progress = p) }
         }
     }
@@ -203,7 +204,6 @@ class BrowserViewModel @Inject constructor(
                 val existing = _state.value.tabs.firstOrNull { it.id == id }
                 val newFavicon = favicon ?: existing?.faviconUrl
 
-                // Only DB write if something actually changed
                 if (existing?.url != url ||
                     existing.title != title ||
                     existing.faviconUrl != newFavicon
@@ -224,12 +224,16 @@ class BrowserViewModel @Inject constructor(
                 }
 
                 val bm = bookmarkDao.findByUrl(url)
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        progress = 100,
-                        isCurrentUrlBookmarked = bm != null,
-                    )
+                val state = _state.value
+                if (state.isLoading || state.progress != 100 ||
+                    state.isCurrentUrlBookmarked != (bm != null)) {
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            progress = 100,
+                            isCurrentUrlBookmarked = bm != null,
+                        )
+                    }
                 }
             }
         }
@@ -311,7 +315,7 @@ class BrowserViewModel @Inject constructor(
             it.copy(
                 activeTabId = id,
                 urlInput = url,
-                showSearchOverlay = false,   // ensure clean state
+                showSearchOverlay = false,
             )
         }
     }
