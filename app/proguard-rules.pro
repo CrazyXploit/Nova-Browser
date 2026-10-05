@@ -16,6 +16,9 @@
     @android.webkit.JavascriptInterface <methods>;
 }
 
+# Keep WebViewAssetLoader
+-keep class androidx.webkit.** { *; }
+
 # Keep our model classes
 -keep class com.nova.browser.data.** { *; }
 -keep class com.nova.browser.util.** { *; }
