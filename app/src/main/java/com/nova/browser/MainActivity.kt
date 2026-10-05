@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.nova.browser.data.UserAgentManager
 import com.nova.browser.ui.NovaApp
 import com.nova.browser.ui.theme.NovaTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -17,6 +18,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Load persisted UA
+        UserAgentManager.load(this)
+
         setContent {
             NovaTheme {
                 Surface(
