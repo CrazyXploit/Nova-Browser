@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -19,7 +20,9 @@ import com.nova.browser.data.HistoryEntity
 import com.nova.browser.data.ImageQualityManager
 import com.nova.browser.data.MediaSniffer
 import com.nova.browser.data.MyIpFetcher
+import com.nova.browser.data.NightModeInjector
 import com.nova.browser.data.SearchEngineManager
+import com.nova.browser.data.SpeedDialManager
 import com.nova.browser.data.TabDao
 import com.nova.browser.data.TabEntity
 import com.nova.browser.data.UsageStats
@@ -77,6 +80,8 @@ data class BrowserUiState(
     val imageQuality: ImageQualityManager.Quality = ImageQualityManager.Quality.HIGH,
     val effectiveQualityLabel: String = "High",
     val dataSaver: Boolean = false,
+    val nightMode: NightModeInjector.Mode = NightModeInjector.Mode.AUTO,
+    val isSystemDark: Boolean = true,
     val trackersBlocked: Int = 0,
     val searchEngineId: String = "duckduckgo",
     val searchEngineName: String = "DuckDuckGo",
@@ -89,8 +94,15 @@ data class BrowserUiState(
     val statsTimeSavedMs: Long = 0,
     val statsTimeSpentMs: Long = 0,
     val statsDataSavedBytes: Long = 0,
+    val topSites: List<SpeedDialManager.Site> = emptyList(),
+    val fullscreenVideo: Boolean = false,
 ) {
     val activeTab: TabEntity? get() = tabs.firstOrNull { it.id == activeTabId }
+    val nightModeActive: Boolean get() = when (nightMode) {
+        NightModeInjector.Mode.OFF -> false
+        NightModeInjector.Mode.ON -> true
+        NightModeInjector.Mode.AUTO -> isSystemDark
+    }
 }
 
 @HiltViewModel
@@ -144,12 +156,18 @@ class BrowserViewModel @Inject constructor(
             goHome()
         }
     }
-
     val goForward: () -> Unit = { webViewRef?.let { if (it.canGoForward()) it.goForward() } }
     val reload: () -> Unit = { webViewRef?.reload() }
     val stopLoading: () -> Unit = { webViewRef?.stopLoading() }
     val canGoBack: () -> Boolean = { webViewRef?.canGoBack() == true }
     val canGoForward: () -> Boolean = { webViewRef?.canGoForward() == true }
+
+    val swipeBack: () -> Unit = {
+        val wv = webViewRef
+        if (wv != null && wv.canGoBack()) {
+            wv.goBack()
+        }
+    }
 
     val findText: (String) -> Unit = { query ->
         webViewRef?.let { wv ->
@@ -225,6 +243,13 @@ class BrowserViewModel @Inject constructor(
         ImageQualityManager.load(ctx)
         SearchEngineManager.load(ctx)
         UsageStats.load(ctx)
+        NightModeInjector.load(ctx)
+        SpeedDialManager.load(ctx)
+
+        val isDark = try {
+            val uiMode = ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+            uiMode == Configuration.UI_MODE_NIGHT_YES
+        } catch (_: Exception) { true }
 
         _state.update {
             it.copy(
@@ -235,6 +260,8 @@ class BrowserViewModel @Inject constructor(
                 dataSaver = ImageQualityManager.dataSaver,
                 searchEngineId = SearchEngineManager.currentId,
                 searchEngineName = SearchEngineManager.current.name,
+                nightMode = NightModeInjector.mode,
+                isSystemDark = isDark,
             )
         }
 
@@ -260,6 +287,13 @@ class BrowserViewModel @Inject constructor(
         }
         viewModelScope.launch {
             if (tabDao.observeAll().first().isEmpty()) createTab(HOME_PLACEHOLDER)
+        }
+
+        // Speed dial updates
+        viewModelScope.launch {
+            SpeedDialManager.topSites.collect { sites ->
+                _state.update { it.copy(topSites = sites) }
+            }
         }
 
         sessionStartTime = SystemClock.elapsedRealtime()
@@ -458,7 +492,31 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
-    // ── Toggles (no HTTPS toggle) ──────────────────────────
+    // ── Night mode ─────────────────────────────────────────
+    val cycleNightMode: () -> Unit = {
+        val current = NightModeInjector.mode
+        val next = when (current) {
+            NightModeInjector.Mode.AUTO -> NightModeInjector.Mode.ON
+            NightModeInjector.Mode.ON -> NightModeInjector.Mode.OFF
+            NightModeInjector.Mode.OFF -> NightModeInjector.Mode.AUTO
+        }
+        NightModeInjector.updateMode(next)
+        NightModeInjector.save(getApplication())
+        _state.update { it.copy(nightMode = next) }
+        // Reapply
+        val wv = webViewRef
+        if (wv != null) {
+            try {
+                if (_state.value.nightModeActive) {
+                    wv.evaluateJavascript(NightModeInjector.buildCss(), null)
+                } else {
+                    wv.evaluateJavascript(NightModeInjector.removeCss(), null)
+                }
+            } catch (_: Exception) { }
+        }
+    }
+
+    // ── Toggles ────────────────────────────────────────────
     val setImageQuality: (ImageQualityManager.Quality) -> Unit = { q ->
         ImageQualityManager.updateQuality(q)
         ImageQualityManager.save(getApplication())
@@ -531,6 +589,15 @@ class BrowserViewModel @Inject constructor(
             val ok = ErudaManager.forceRedownload(getApplication())
             _state.update { it.copy(erudaReady = ok) }
         }
+    }
+
+    // ── Speed dial ─────────────────────────────────────────
+    val openSpeedDial: (String) -> Unit = { url ->
+        navigate(url)
+    }
+
+    val removeSpeedDial: (SpeedDialManager.Site) -> Unit = { site ->
+        SpeedDialManager.remove(site.host, getApplication())
     }
 
     // ── Long-press actions ─────────────────────────────────
@@ -710,5 +777,6 @@ class BrowserViewModel @Inject constructor(
         val delta = now - sessionStartTime
         UsageStats.addSessionTime(delta)
         UsageStats.save(getApplication())
+        SpeedDialManager.save(getApplication())
     }
 }
