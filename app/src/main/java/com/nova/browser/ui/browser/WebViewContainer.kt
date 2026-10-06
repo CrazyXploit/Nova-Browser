@@ -225,6 +225,7 @@ fun WebViewContainer(
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
                         currentOnProgress(newProgress)
                     }
+
                     override fun onConsoleMessage(c: ConsoleMessage?): Boolean {
                         val msg = c?.message() ?: ""
                         if (msg.startsWith("NOVA_MEDIA:")) {
@@ -238,17 +239,11 @@ fun WebViewContainer(
                         view: android.view.View?,
                         callback: CustomViewCallback?,
                     ) {
-                        // Not used — fullscreen handled by activity
+                        // Fullscreen video — not implemented (would require activity recreation)
                     }
 
                     override fun onHideCustomView() {
-                    }
-
-                    override fun onEnterFullscreenMode(
-                        view: android.view.View,
-                        callback: CustomViewCallback,
-                    ) {
-                        // API 33+ fullscreen (video)
+                        // Fullscreen video closed
                     }
                 }
 
@@ -260,12 +255,11 @@ fun WebViewContainer(
 
                 // ═══════════════════════════════════════════════════
                 //  SWIPE GESTURES — BACK + FORWARD
-                //  Manual touch tracking — portable across all APIs.
                 // ═══════════════════════════════════════════════════
                 var startX = 0f
                 var startY = 0f
                 var startTime = 0L
-                var direction = 0   // -1 = back (from left), +1 = forward (from right), 0 = none
+                var direction = 0
 
                 setOnTouchListener { _, event ->
                     val screenWidth = resources.displayMetrics.widthPixels
@@ -275,11 +269,8 @@ fun WebViewContainer(
                             startX = event.x
                             startY = event.y
                             startTime = System.currentTimeMillis()
-
-                            // Detect swipe origin
                             val fromLeftEdge = startX < 80f
                             val fromRightEdge = startX > (screenWidth - 80f)
-
                             direction = when {
                                 fromLeftEdge -> -1
                                 fromRightEdge -> 1
@@ -287,40 +278,28 @@ fun WebViewContainer(
                             }
                             false
                         }
-
                         MotionEvent.ACTION_UP -> {
                             if (direction != 0) {
                                 val dx = event.x - startX
                                 val dy = event.y - startY
                                 val dt = System.currentTimeMillis() - startTime
-
                                 val fastEnough = dt < 600L
                                 val horizontalEnough = abs(dy) < 150f
 
-                                when (direction) {
-                                    -1 -> {
-                                        // Backward swipe: from left edge, drag right
-                                        if (dx > 200f && horizontalEnough && fastEnough) {
-                                            currentOnSwipeBack()
-                                        }
-                                    }
-                                    1 -> {
-                                        // Forward swipe: from right edge, drag left
-                                        if (dx < -200f && horizontalEnough && fastEnough) {
-                                            currentOnSwipeForward()
-                                        }
-                                    }
+                                if (direction == -1 && dx > 200f && horizontalEnough && fastEnough) {
+                                    currentOnSwipeBack()
+                                }
+                                if (direction == 1 && dx < -200f && horizontalEnough && fastEnough) {
+                                    currentOnSwipeForward()
                                 }
                             }
                             direction = 0
                             false
                         }
-
                         MotionEvent.ACTION_CANCEL -> {
                             direction = 0
                             false
                         }
-
                         else -> false
                     }
                 }
