@@ -27,6 +27,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nova.browser.data.HomeBackgroundManager
 import com.nova.browser.data.SpeedDialManager
 
 @Composable
@@ -59,10 +61,12 @@ fun HomeDashboard(
     timeSpentMs: Long,
     dataSavedBytes: Long,
     topSites: List<SpeedDialManager.Site>,
+    homeBackground: HomeBackgroundManager.Preset,
     onSearch: (String) -> Unit,
     onOpenSite: (String) -> Unit,
     onAddSite: () -> Unit,
     onLongPressSite: (SpeedDialManager.Site) -> Unit,
+    onCustomizeBackground: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
 
@@ -77,11 +81,9 @@ fun HomeDashboard(
         else -> 80.dp
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .imePadding(),
+    HomeBackground(
+        preset = homeBackground,
+        customColor = 0xFF7C5CFF,
     ) {
         Column(
             modifier = Modifier
@@ -92,10 +94,37 @@ fun HomeDashboard(
                     bottom = navBarPad + 24.dp,
                     start = horizontalPadding,
                     end = horizontalPadding,
-                ),
+                )
+                .imePadding(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // ── Logo + name ────────────────────────────
+            // ── Background picker button ──────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onCustomizeBackground() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.Palette, "Customize background",
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // ── Logo ────────────────────────────────────
             Box(
                 modifier = Modifier
                     .size(56.dp)
@@ -122,7 +151,7 @@ fun HomeDashboard(
 
             Text(
                 "Nova",
-                color = MaterialTheme.colorScheme.onBackground,
+                color = Color.White,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
@@ -132,7 +161,7 @@ fun HomeDashboard(
 
             Text(
                 "Search with $engineName",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.White.copy(alpha = 0.6f),
                 fontSize = 11.sp,
             )
 
@@ -145,14 +174,14 @@ fun HomeDashboard(
                     .widthIn(max = 520.dp)
                     .height(52.dp)
                     .clip(RoundedCornerShape(26.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .background(Color.White.copy(alpha = 0.1f))
                     .padding(horizontal = 18.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Default.Search, null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = Color.White.copy(alpha = 0.6f),
                         modifier = Modifier.size(20.dp),
                     )
                     Spacer(Modifier.width(12.dp))
@@ -160,7 +189,7 @@ fun HomeDashboard(
                         if (query.isBlank()) {
                             Text(
                                 "Search or type URL",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = Color.White.copy(alpha = 0.5f),
                                 fontSize = 15.sp,
                             )
                         }
@@ -169,7 +198,7 @@ fun HomeDashboard(
                             onValueChange = { query = it },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onBackground,
+                                color = Color.White,
                                 fontSize = 15.sp,
                             ),
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -239,14 +268,14 @@ private fun MiniStat(value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = value,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = Color.White,
             fontSize = 17.sp,
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(2.dp))
         Text(
             text = label,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = Color.White.copy(alpha = 0.5f),
             fontSize = 10.sp,
         )
     }
@@ -258,7 +287,7 @@ private fun VerticalDivider() {
         modifier = Modifier
             .width(1.dp)
             .height(26.dp)
-            .background(MaterialTheme.colorScheme.outline),
+            .background(Color.White.copy(alpha = 0.15f)),
     )
 }
 
