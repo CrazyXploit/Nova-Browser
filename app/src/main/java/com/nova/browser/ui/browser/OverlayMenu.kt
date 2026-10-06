@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
@@ -62,11 +63,13 @@ fun OverlayMenu(
     imageQualityLabel: String,
     dataSaver: Boolean,
     nightModeLabel: String,
+    readerModeActive: Boolean,
     onToggleAdBlock: () -> Unit,
     onToggleEruda: () -> Unit,
     onToggleDesktop: () -> Unit,
     onToggleIncognito: () -> Unit,
     onCycleNightMode: () -> Unit,
+    onToggleReader: () -> Unit,
     onUserAgent: () -> Unit,
     onMyIp: () -> Unit,
     onImageQuality: () -> Unit,
@@ -119,6 +122,7 @@ fun OverlayMenu(
 
                 ToggleItem(Icons.Default.Block, "Ad Blocker", adBlockEnabled, onToggleAdBlock)
                 ToggleItem(Icons.Default.Code, "Eruda DevTools", erudaEnabled, onToggleEruda)
+                ToggleItem(Icons.Default.MenuBook, "Reader Mode", readerModeActive, onToggleReader)
                 ToggleItem(Icons.Default.Devices, "Desktop Mode", desktopMode, onToggleDesktop)
                 ToggleItem(Icons.Default.Visibility, "Incognito", isIncognito, onToggleIncognito)
 
