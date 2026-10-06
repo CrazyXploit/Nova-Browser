@@ -1,11 +1,9 @@
 package com.nova.browser.ui.browser
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
 import android.util.Log
-import android.view.GestureDetector
 import android.view.MotionEvent
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
@@ -34,6 +32,7 @@ import com.nova.browser.data.MediaSniffer
 import com.nova.browser.data.NightModeInjector
 import com.nova.browser.data.SpeedDialManager
 import com.nova.browser.data.UserAgentManager
+import kotlin.math.abs
 
 private const val TAG = "NovaWebView"
 private const val HOME_PLACEHOLDER = "about:home"
@@ -240,31 +239,48 @@ fun WebViewContainer(
                     }
                 )
 
-                // === Swipe-from-left-edge to go back ===
-                val gestureDetector = GestureDetector(
-                    ctx,
-                    object : GestureDetector.SimpleOnGestureListener() {
-                        override fun onFling(
-                            e1: MotionEvent,
-                            e2: MotionEvent,
-                            velocityX: Float,
-                            velocityY: Float,
-                        ): Boolean {
-                            val dx = e2.x - e1.x
-                            val dy = e2.y - e1.y
-                            // Started from left edge, went right, mostly horizontal
-                            if (e1.x < 80f && dx > 180f && kotlin.math.abs(dy) < 120f) {
-                                currentOnSwipeBack()
-                                return true
-                            }
-                            return false
-                        }
-                    },
-                )
+                // ═══════════════════════════════════════════════════
+                //  SWIPE-FROM-LEFT-EDGE TO GO BACK
+                //  Uses manual touch tracking — no GestureDetector,
+                //  no override signature issues, works on all APIs.
+                // ═══════════════════════════════════════════════════
+                var swipeStartX = 0f
+                var swipeStartY = 0f
+                var swipeStartTime = 0L
+                var tracking = false
 
                 setOnTouchListener { _, event ->
-                    gestureDetector.onTouchEvent(event)
-                    false
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> {
+                            swipeStartX = event.x
+                            swipeStartY = event.y
+                            swipeStartTime = System.currentTimeMillis()
+                            // Only track swipes starting near left edge
+                            tracking = event.x < 80f
+                            false
+                        }
+                        MotionEvent.ACTION_UP -> {
+                            if (tracking) {
+                                val dx = event.x - swipeStartX
+                                val dy = event.y - swipeStartY
+                                val dt = System.currentTimeMillis() - swipeStartTime
+                                // Fast enough + far enough + mostly horizontal
+                                if (dx > 200f &&
+                                    abs(dy) < 150f &&
+                                    dt < 600L
+                                ) {
+                                    currentOnSwipeBack()
+                                }
+                            }
+                            tracking = false
+                            false
+                        }
+                        MotionEvent.ACTION_CANCEL -> {
+                            tracking = false
+                            false
+                        }
+                        else -> false
+                    }
                 }
 
                 CookieManager.getInstance().setAcceptCookie(true)
