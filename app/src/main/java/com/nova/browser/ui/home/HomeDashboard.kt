@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -26,11 +25,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.DataUsage
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,7 +40,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -65,31 +59,20 @@ fun HomeDashboard(
 ) {
     var query by remember { mutableStateOf("") }
 
-    // Respect system insets
     val statusBarPad = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navBarPad = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    // DPI-safe sizing
-    val config = LocalConfiguration.current
-    val screenWidth = config.screenWidthDp
-    val screenHeight = config.screenHeightDp
+    val screenWidth = LocalConfiguration.current.screenWidthDp
 
-    // Responsive sizing
-    val brandSize = when {
-        screenWidth < 360 -> 56.dp    // small phones
-        screenWidth < 400 -> 64.dp    // normal phones
-        screenWidth < 600 -> 72.dp    // large phones
-        else -> 80.dp                 // tablets
-    }
-    val brandFontSize = when {
-        screenWidth < 360 -> 28.sp
-        screenWidth < 600 -> 32.sp
-        else -> 36.sp
+    val logoSize = when {
+        screenWidth < 360 -> 64.dp
+        screenWidth < 400 -> 72.dp
+        else -> 80.dp
     }
     val horizontalPadding = when {
-        screenWidth < 360 -> 16.dp
-        screenWidth < 600 -> 24.dp
-        else -> 48.dp
+        screenWidth < 360 -> 20.dp
+        screenWidth < 600 -> 32.dp
+        else -> 80.dp
     }
 
     Box(
@@ -103,29 +86,25 @@ fun HomeDashboard(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(
-                    top = statusBarPad + 24.dp,
+                    top = statusBarPad,
                     bottom = navBarPad + 24.dp,
                     start = horizontalPadding,
                     end = horizontalPadding,
                 ),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Small vertical spacer — centers content vertically if screen is tall
-            Spacer(
-                Modifier.height(
-                    if (screenHeight > 800) 40.dp else 16.dp
-                )
-            )
+            Spacer(Modifier.height(60.dp))
 
-            // Brand mark
+            // ── Gradient Logo ──────────────────────────
             Box(
                 modifier = Modifier
-                    .size(brandSize)
-                    .clip(RoundedCornerShape(brandSize / 4))
+                    .size(logoSize)
+                    .clip(RoundedCornerShape(logoSize / 3))
                     .background(
                         Brush.linearGradient(
                             listOf(
                                 MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.secondary,
                                 MaterialTheme.colorScheme.tertiary,
                             )
                         )
@@ -135,21 +114,22 @@ fun HomeDashboard(
                 Text(
                     "N",
                     color = Color.White,
-                    fontSize = brandFontSize,
+                    fontSize = (logoSize.value * 0.5f).sp,
                     fontWeight = FontWeight.Bold,
                 )
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(20.dp))
 
             Text(
-                "Nova Browser",
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.SemiBold,
+                "Nova",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
             )
 
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
 
             Text(
                 "Search with $engineName",
@@ -157,17 +137,17 @@ fun HomeDashboard(
                 fontSize = 12.sp,
             )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(36.dp))
 
-            // Search bar
+            // ── Search bar ─────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 520.dp)
-                    .height(52.dp)
-                    .clip(RoundedCornerShape(26.dp))
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(27.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 18.dp),
+                    .padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -190,7 +170,7 @@ fun HomeDashboard(
                             onValueChange = { query = it },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = MaterialTheme.colorScheme.onBackground,
                                 fontSize = 15.sp,
                             ),
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -209,150 +189,83 @@ fun HomeDashboard(
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(60.dp))
 
-            // Stat header
+            // ── Minimal stat row ───────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 520.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                Text(
-                    "Your Stats",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
+                MiniStat(
+                    value = formatBytesShort(dataSavedBytes),
+                    label = "saved",
                 )
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            // Row 1 — Blocked + Data Saved
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 520.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                StatCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Default.Security,
-                    label = "Blocked",
+                VerticalDivider()
+                MiniStat(
                     value = "${trackersBlocked + adsBlocked}",
-                    subtitle = "trackers & ads",
-                    tint = MaterialTheme.colorScheme.primary,
+                    label = "blocked",
                 )
-                StatCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Default.DataUsage,
-                    label = "Data Saved",
-                    value = formatBytes(dataSavedBytes),
-                    subtitle = "bandwidth saved",
-                    tint = MaterialTheme.colorScheme.tertiary,
+                VerticalDivider()
+                MiniStat(
+                    value = formatTimeShort(timeSpentMs),
+                    label = "browsed",
                 )
             }
 
-            Spacer(Modifier.height(10.dp))
-
-            // Row 2 — Load Time Saved
-            StatCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 520.dp),
-                icon = Icons.Default.Bolt,
-                label = "Load Time Saved",
-                value = formatTime(timeSavedMs),
-                subtitle = "estimated",
-                tint = MaterialTheme.colorScheme.primary,
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            // Row 3 — Time Spent
-            StatCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 520.dp),
-                icon = Icons.Default.AccessTime,
-                label = "Time Spent Browsing",
-                value = formatTime(timeSpentMs),
-                subtitle = "total",
-                tint = MaterialTheme.colorScheme.secondary,
-            )
-
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(40.dp))
         }
     }
 }
 
 @Composable
-private fun StatCard(
-    modifier: Modifier = Modifier,
-    icon: ImageVector,
-    label: String,
-    value: String,
-    subtitle: String,
-    tint: Color,
-) {
-    Column(
-        modifier = modifier
-            .heightIn(min = 90.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-            .padding(14.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                icon, null,
-                tint = tint,
-                modifier = Modifier.size(16.dp),
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                label,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-            )
-        }
-        Spacer(Modifier.height(8.dp))
+private fun MiniStat(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            value,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 20.sp,
+            text = value,
+            color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
         )
+        Spacer(Modifier.height(2.dp))
         Text(
-            subtitle,
+            text = label,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
         )
     }
 }
 
-private fun formatTime(ms: Long): String {
-    if (ms <= 0) return "0s"
-    val totalSeconds = ms / 1000
-    val hours = totalSeconds / 3600
-    val minutes = (totalSeconds % 3600) / 60
-    val seconds = totalSeconds % 60
+@Composable
+private fun VerticalDivider() {
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .height(28.dp)
+            .background(MaterialTheme.colorScheme.outline),
+    )
+}
+
+private fun formatTimeShort(ms: Long): String {
+    if (ms <= 0) return "0m"
+    val totalMinutes = ms / 60_000
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
     return when {
-        hours > 0 -> "${hours}h ${minutes}m"
-        minutes > 0 -> "${minutes}m ${seconds}s"
-        else -> "${seconds}s"
+        hours > 0 -> "${hours}h"
+        minutes > 0 -> "${minutes}m"
+        else -> "0m"
     }
 }
 
-private fun formatBytes(bytes: Long): String {
-    if (bytes <= 0) return "0 B"
-    val kb = bytes / 1024.0
-    val mb = kb / 1024.0
+private fun formatBytesShort(bytes: Long): String {
+    if (bytes <= 0) return "0"
+    val mb = bytes / 1024.0 / 1024.0
     val gb = mb / 1024.0
     return when {
-        gb >= 1 -> "%.2f GB".format(gb)
-        mb >= 1 -> "%.1f MB".format(mb)
-        kb >= 1 -> "%.0f KB".format(kb)
-        else -> "$bytes B"
+        gb >= 1 -> "%.1fG".format(gb)
+        mb >= 1 -> "%.0fM".format(mb)
+        else -> "${bytes / 1024}K"
     }
 }
