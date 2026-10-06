@@ -1,7 +1,10 @@
 package com.nova.browser.ui.browser
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,20 +17,17 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.Tab
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,11 +56,18 @@ fun UrlBar(
     val isSecure = url.startsWith("https")
     val isHome = url.isBlank()
 
+    // Subtle scale animation when loading
+    val barScale by animateFloatAsState(
+        targetValue = if (loading) 0.98f else 1f,
+        animationSpec = tween(200),
+        label = "url_scale",
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (isIncognito) Color(0xFF1A1A2E)
+                if (isIncognito) Color(0xFF1A0E2E)
                 else MaterialTheme.colorScheme.background
             )
             .statusBarsPadding()
@@ -68,20 +75,31 @@ fun UrlBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 2.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box {
-                IconButton(onClick = onShieldClick, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Shield,
-                        contentDescription = "Site info",
-                        tint = if (isSecure) Color(0xFF34D399)
-                        else if (isHome) MaterialTheme.colorScheme.onSurfaceVariant
-                        else MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
+            // ── Shield icon (left) ─────────────────────
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { onShieldClick() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Shield,
+                    contentDescription = "Site info",
+                    tint = when {
+                        isHome -> MaterialTheme.colorScheme.onSurfaceVariant
+                        isSecure -> Color(0xFF34D399)
+                        else -> MaterialTheme.colorScheme.error
+                    },
+                    modifier = Modifier.size(22.dp),
+                )
+                // Tracker badge
                 if (trackersBlocked > 0) {
                     Box(
                         modifier = Modifier
@@ -93,7 +111,7 @@ fun UrlBar(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            trackersBlocked.toString().take(2),
+                            if (trackersBlocked > 99) "99" else trackersBlocked.toString(),
                             color = MaterialTheme.colorScheme.onPrimary,
                             fontSize = 8.sp,
                             fontWeight = FontWeight.Bold,
@@ -102,109 +120,90 @@ fun UrlBar(
                 }
             }
 
+            Spacer(Modifier.width(4.dp))
+
+            // ── URL pill (middle) ──────────────────────
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(40.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(21.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { onBarClick() }
-                    .padding(horizontal = 12.dp),
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { onBarClick() }
+                    .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        if (isHome) Icons.Default.Search else Icons.Default.Language,
-                        null,
-                        modifier = Modifier.size(13.dp),
+                        imageVector = if (isHome) Icons.Default.Search else Icons.Default.Language,
+                        contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
                     )
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(10.dp))
                     Text(
-                        text = if (isHome) "Search or type URL" else url,
+                        text = if (isHome) "Search or enter URL" else url,
                         color = if (isHome) MaterialTheme.colorScheme.onSurfaceVariant
                         else MaterialTheme.colorScheme.onSurface,
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    if (loading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
                 }
             }
 
-            Spacer(Modifier.width(2.dp))
+            Spacer(Modifier.width(4.dp))
 
-            IconButton(onClick = onRefreshClick, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Default.Refresh, "Refresh",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-
-            IconButton(
-                onClick = onBookmarkClick,
-                enabled = !isHome,
-                modifier = Modifier.size(36.dp),
+            // ── Tabs counter (right) ───────────────────
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { onTabsClick() },
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = if (isBookmarked) Icons.Default.Bookmark
-                    else Icons.Default.BookmarkBorder,
-                    contentDescription = "Bookmark",
-                    tint = if (isHome) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    else if (isBookmarked) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(20.dp),
+                    imageVector = Icons.Default.Tab,
+                    contentDescription = "Tabs",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(22.dp),
                 )
-            }
-
-            Box {
-                IconButton(onClick = onTabsClick, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Default.Language, "Tabs",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
                 if (tabCount > 0) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(top = 2.dp, end = 2.dp)
-                            .size(14.dp)
-                            .clip(RoundedCornerShape(7.dp))
+                            .padding(top = 4.dp, end = 4.dp)
+                            .size(16.dp)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.primary),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            tabCount.toString(),
+                            if (tabCount > 99) "99" else tabCount.toString(),
                             color = MaterialTheme.colorScheme.onPrimary,
-                            fontSize = 8.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                         )
                     }
                 }
             }
-
-            IconButton(onClick = onMoreClick, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Default.MoreVert, "More",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
         }
 
+        // ── Thin progress line ─────────────────────────
         if (progress in 1..99) {
             LinearProgressIndicator(
                 progress = { progress / 100f },
-                modifier = Modifier.fillMaxWidth().height(2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.5.dp),
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = Color.Transparent,
             )
