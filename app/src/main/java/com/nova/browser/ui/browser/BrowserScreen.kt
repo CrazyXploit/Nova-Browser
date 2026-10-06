@@ -100,7 +100,11 @@ fun BrowserScreen(
                             timeSavedMs = state.statsTimeSavedMs,
                             timeSpentMs = state.statsTimeSpentMs,
                             dataSavedBytes = state.statsDataSavedBytes,
+                            topSites = state.topSites,
                             onSearch = vm.searchFromHome,
+                            onOpenSite = vm.openSpeedDial,
+                            onAddSite = { /* TODO: add custom site dialog */ },
+                            onLongPressSite = vm.removeSpeedDial,
                         )
                     } else {
                         WebViewContainer(
@@ -109,10 +113,13 @@ fun BrowserScreen(
                             userAgentMode = state.userAgentMode,
                             imageQuality = state.imageQuality,
                             dataSaver = state.dataSaver,
+                            nightModeActive = state.nightModeActive,
+                            isSystemDark = state.isSystemDark,
                             onPageStarted = vm.onPageStarted,
                             onProgress = vm.onProgress,
                             onPageFinished = vm.onPageFinished,
                             onDownloadStart = vm.onDownloadStart,
+                            onSwipeBack = vm.swipeBack,
                             onWebViewCreated = { wv -> vm.attachWebView(wv) },
                         )
                     }
@@ -240,10 +247,16 @@ fun BrowserScreen(
         isIncognito = state.isIncognito,
         imageQualityLabel = state.effectiveQualityLabel,
         dataSaver = state.dataSaver,
+        nightModeLabel = when (state.nightMode) {
+            com.nova.browser.data.NightModeInjector.Mode.AUTO -> "Auto"
+            com.nova.browser.data.NightModeInjector.Mode.ON -> "On"
+            com.nova.browser.data.NightModeInjector.Mode.OFF -> "Off"
+        },
         onToggleAdBlock = vm.toggleAdBlock,
         onToggleEruda = vm.toggleEruda,
         onToggleDesktop = vm.toggleDesktopMode,
         onToggleIncognito = vm.toggleIncognito,
+        onCycleNightMode = vm.cycleNightMode,
         onUserAgent = { vm.closeOverlayMenu(); vm.openUserAgentPicker() },
         onMyIp = { vm.closeOverlayMenu(); vm.openIpOverlay() },
         onImageQuality = { vm.closeOverlayMenu(); vm.openImageQualityPicker() },
