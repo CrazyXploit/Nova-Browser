@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
@@ -60,10 +61,12 @@ fun OverlayMenu(
     isIncognito: Boolean,
     imageQualityLabel: String,
     dataSaver: Boolean,
+    nightModeLabel: String,
     onToggleAdBlock: () -> Unit,
     onToggleEruda: () -> Unit,
     onToggleDesktop: () -> Unit,
     onToggleIncognito: () -> Unit,
+    onCycleNightMode: () -> Unit,
     onUserAgent: () -> Unit,
     onMyIp: () -> Unit,
     onImageQuality: () -> Unit,
@@ -121,6 +124,12 @@ fun OverlayMenu(
 
                 Spacer(Modifier.size(4.dp))
 
+                ActionItem(
+                    Icons.Default.DarkMode,
+                    "Night Mode",
+                    nightModeLabel,
+                    onCycleNightMode,
+                )
                 ActionItem(
                     Icons.Default.Image,
                     "Image Quality",
