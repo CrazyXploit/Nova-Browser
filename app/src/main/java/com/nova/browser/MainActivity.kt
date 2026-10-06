@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.nova.browser.data.HomeBackgroundManager
 import com.nova.browser.data.NightModeInjector
 import com.nova.browser.data.SearchEngineManager
 import com.nova.browser.data.SpeedDialManager
@@ -28,6 +29,7 @@ class MainActivity : ComponentActivity() {
         UsageStats.load(this)
         NightModeInjector.load(this)
         SpeedDialManager.load(this)
+        HomeBackgroundManager.load(this)
 
         setContent {
             NovaTheme {
@@ -45,5 +47,6 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         UsageStats.save(this)
         SpeedDialManager.save(this)
+        HomeBackgroundManager.save(this)
     }
 }
