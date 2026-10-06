@@ -56,6 +56,7 @@ fun WebViewContainer(
     onPageFinished: (String, String, String?) -> Unit,
     onDownloadStart: (String, String?, String?, String?, Long) -> Unit,
     onSwipeBack: () -> Unit,
+    onSwipeForward: () -> Unit,
     onWebViewCreated: (WebView) -> Unit = {},
 ) {
     val holder = remember { WebViewHolder() }
@@ -65,6 +66,7 @@ fun WebViewContainer(
     val currentOnPageFinished by rememberUpdatedState(onPageFinished)
     val currentOnDownloadStart by rememberUpdatedState(onDownloadStart)
     val currentOnSwipeBack by rememberUpdatedState(onSwipeBack)
+    val currentOnSwipeForward by rememberUpdatedState(onSwipeForward)
     val currentOnWebViewCreated by rememberUpdatedState(onWebViewCreated)
 
     LaunchedEffect(userAgentMode) {
@@ -231,6 +233,23 @@ fun WebViewContainer(
                         }
                         return true
                     }
+
+                    override fun onShowCustomView(
+                        view: android.view.View?,
+                        callback: CustomViewCallback?,
+                    ) {
+                        // Not used — fullscreen handled by activity
+                    }
+
+                    override fun onHideCustomView() {
+                    }
+
+                    override fun onEnterFullscreenMode(
+                        view: android.view.View,
+                        callback: CustomViewCallback,
+                    ) {
+                        // API 33+ fullscreen (video)
+                    }
                 }
 
                 setDownloadListener(
@@ -240,45 +259,68 @@ fun WebViewContainer(
                 )
 
                 // ═══════════════════════════════════════════════════
-                //  SWIPE-FROM-LEFT-EDGE TO GO BACK
-                //  Uses manual touch tracking — no GestureDetector,
-                //  no override signature issues, works on all APIs.
+                //  SWIPE GESTURES — BACK + FORWARD
+                //  Manual touch tracking — portable across all APIs.
                 // ═══════════════════════════════════════════════════
-                var swipeStartX = 0f
-                var swipeStartY = 0f
-                var swipeStartTime = 0L
-                var tracking = false
+                var startX = 0f
+                var startY = 0f
+                var startTime = 0L
+                var direction = 0   // -1 = back (from left), +1 = forward (from right), 0 = none
 
                 setOnTouchListener { _, event ->
+                    val screenWidth = resources.displayMetrics.widthPixels
+
                     when (event.actionMasked) {
                         MotionEvent.ACTION_DOWN -> {
-                            swipeStartX = event.x
-                            swipeStartY = event.y
-                            swipeStartTime = System.currentTimeMillis()
-                            // Only track swipes starting near left edge
-                            tracking = event.x < 80f
+                            startX = event.x
+                            startY = event.y
+                            startTime = System.currentTimeMillis()
+
+                            // Detect swipe origin
+                            val fromLeftEdge = startX < 80f
+                            val fromRightEdge = startX > (screenWidth - 80f)
+
+                            direction = when {
+                                fromLeftEdge -> -1
+                                fromRightEdge -> 1
+                                else -> 0
+                            }
                             false
                         }
+
                         MotionEvent.ACTION_UP -> {
-                            if (tracking) {
-                                val dx = event.x - swipeStartX
-                                val dy = event.y - swipeStartY
-                                val dt = System.currentTimeMillis() - swipeStartTime
-                                // Fast enough + far enough + mostly horizontal
-                                if (dx > 200f &&
-                                    abs(dy) < 150f &&
-                                    dt < 600L
-                                ) {
-                                    currentOnSwipeBack()
+                            if (direction != 0) {
+                                val dx = event.x - startX
+                                val dy = event.y - startY
+                                val dt = System.currentTimeMillis() - startTime
+
+                                val fastEnough = dt < 600L
+                                val horizontalEnough = abs(dy) < 150f
+
+                                when (direction) {
+                                    -1 -> {
+                                        // Backward swipe: from left edge, drag right
+                                        if (dx > 200f && horizontalEnough && fastEnough) {
+                                            currentOnSwipeBack()
+                                        }
+                                    }
+                                    1 -> {
+                                        // Forward swipe: from right edge, drag left
+                                        if (dx < -200f && horizontalEnough && fastEnough) {
+                                            currentOnSwipeForward()
+                                        }
+                                    }
                                 }
                             }
-                            tracking = false
+                            direction = 0
                             false
                         }
+
                         MotionEvent.ACTION_CANCEL -> {
-                            tracking = false
+                            direction = 0
                             false
                         }
+
                         else -> false
                     }
                 }
@@ -361,7 +403,6 @@ private fun injectMediaProbe(view: WebView) {
         (function() {
             if (window.__novaMediaProbe) return;
             window.__novaMediaProbe = true;
-
             function probeVideo(v) {
                 try {
                     var src = v.currentSrc || v.src;
