@@ -16,7 +16,6 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -66,8 +65,8 @@ fun WebViewContainer(
     val currentOnProgress by rememberUpdatedState(onProgress)
     val currentOnPageFinished by rememberUpdatedState(onPageFinished)
     val currentOnDownloadStart by rememberUpdatedState(onDownloadStart)
-    val currentOnWebViewCreated by rememberUpdatedState(onWebViewCreated)
     val currentOnSwipeBack by rememberUpdatedState(onSwipeBack)
+    val currentOnWebViewCreated by rememberUpdatedState(onWebViewCreated)
 
     LaunchedEffect(userAgentMode) {
         val wv = holder.webView ?: return@LaunchedEffect
@@ -191,7 +190,6 @@ fun WebViewContainer(
                     override fun onPageFinished(view: WebView?, url: String?) {
                         if (ErudaManager.enabled && url != HOME_PLACEHOLDER) injectEruda(view)
 
-                        // Night mode on every load
                         if (nightModeActive && view != null) {
                             try {
                                 view.evaluateJavascript(NightModeInjector.buildCss(), null)
@@ -214,7 +212,6 @@ fun WebViewContainer(
                             } catch (_: Exception) { null }
                         }
 
-                        // Speed dial — record visit
                         if (url != null && url != HOME_PLACEHOLDER) {
                             SpeedDialManager.recordVisit(url, view?.title ?: "", faviconUrl)
                         }
@@ -243,25 +240,27 @@ fun WebViewContainer(
                     }
                 )
 
-                // Swipe-from-left-edge to go back
-                val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
-                    override fun onFling(
-                        e1: MotionEvent?,
-                        e2: MotionEvent?,
-                        velocityX: Float,
-                        velocityY: Float,
-                    ): Boolean {
-                        if (e1 == null || e2 == null) return false
-                        val dx = e2.x - e1.x
-                        val dy = e2.y - e1.y
-                        // Swipe from left edge, fast, mostly horizontal
-                        if (e1.x < 60f && dx > 150f && kotlin.math.abs(dy) < 100f) {
-                            currentOnSwipeBack()
-                            return true
+                // === Swipe-from-left-edge to go back ===
+                val gestureDetector = GestureDetector(
+                    ctx,
+                    object : GestureDetector.SimpleOnGestureListener() {
+                        override fun onFling(
+                            e1: MotionEvent,
+                            e2: MotionEvent,
+                            velocityX: Float,
+                            velocityY: Float,
+                        ): Boolean {
+                            val dx = e2.x - e1.x
+                            val dy = e2.y - e1.y
+                            // Started from left edge, went right, mostly horizontal
+                            if (e1.x < 80f && dx > 180f && kotlin.math.abs(dy) < 120f) {
+                                currentOnSwipeBack()
+                                return true
+                            }
+                            return false
                         }
-                        return false
-                    }
-                })
+                    },
+                )
 
                 setOnTouchListener { _, event ->
                     gestureDetector.onTouchEvent(event)
