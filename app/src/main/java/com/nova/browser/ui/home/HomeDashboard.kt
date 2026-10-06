@@ -1,6 +1,8 @@
 package com.nova.browser.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nova.browser.data.SpeedDialManager
 
 @Composable
 fun HomeDashboard(
@@ -55,7 +58,11 @@ fun HomeDashboard(
     timeSavedMs: Long,
     timeSpentMs: Long,
     dataSavedBytes: Long,
+    topSites: List<SpeedDialManager.Site>,
     onSearch: (String) -> Unit,
+    onOpenSite: (String) -> Unit,
+    onAddSite: () -> Unit,
+    onLongPressSite: (SpeedDialManager.Site) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
 
@@ -64,11 +71,6 @@ fun HomeDashboard(
 
     val screenWidth = LocalConfiguration.current.screenWidthDp
 
-    val logoSize = when {
-        screenWidth < 360 -> 64.dp
-        screenWidth < 400 -> 72.dp
-        else -> 80.dp
-    }
     val horizontalPadding = when {
         screenWidth < 360 -> 20.dp
         screenWidth < 600 -> 32.dp
@@ -86,25 +88,22 @@ fun HomeDashboard(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(
-                    top = statusBarPad,
+                    top = statusBarPad + 40.dp,
                     bottom = navBarPad + 24.dp,
                     start = horizontalPadding,
                     end = horizontalPadding,
                 ),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(60.dp))
-
-            // ── Gradient Logo ──────────────────────────
+            // ── Logo + name ────────────────────────────
             Box(
                 modifier = Modifier
-                    .size(logoSize)
-                    .clip(RoundedCornerShape(logoSize / 3))
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(18.dp))
                     .background(
                         Brush.linearGradient(
                             listOf(
                                 MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.secondary,
                                 MaterialTheme.colorScheme.tertiary,
                             )
                         )
@@ -114,17 +113,17 @@ fun HomeDashboard(
                 Text(
                     "N",
                     color = Color.White,
-                    fontSize = (logoSize.value * 0.5f).sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                 )
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(14.dp))
 
             Text(
                 "Nova",
                 color = MaterialTheme.colorScheme.onBackground,
-                fontSize = 26.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
             )
@@ -134,20 +133,20 @@ fun HomeDashboard(
             Text(
                 "Search with $engineName",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
             )
 
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(28.dp))
 
             // ── Search bar ─────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 520.dp)
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(27.dp))
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(26.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 18.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -189,7 +188,23 @@ fun HomeDashboard(
                 }
             }
 
-            Spacer(Modifier.height(60.dp))
+            Spacer(Modifier.height(32.dp))
+
+            // ── Speed dial grid ────────────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 520.dp),
+            ) {
+                SpeedDialGrid(
+                    sites = topSites,
+                    onOpen = onOpenSite,
+                    onAdd = onAddSite,
+                    onLongPress = onLongPressSite,
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
 
             // ── Minimal stat row ───────────────────────
             Row(
@@ -214,7 +229,7 @@ fun HomeDashboard(
                 )
             }
 
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(32.dp))
         }
     }
 }
@@ -225,14 +240,14 @@ private fun MiniStat(value: String, label: String) {
         Text(
             text = value,
             color = MaterialTheme.colorScheme.onBackground,
-            fontSize = 18.sp,
+            fontSize = 17.sp,
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(2.dp))
         Text(
             text = label,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 11.sp,
+            fontSize = 10.sp,
         )
     }
 }
@@ -242,7 +257,7 @@ private fun VerticalDivider() {
     Box(
         modifier = Modifier
             .width(1.dp)
-            .height(28.dp)
+            .height(26.dp)
             .background(MaterialTheme.colorScheme.outline),
     )
 }
