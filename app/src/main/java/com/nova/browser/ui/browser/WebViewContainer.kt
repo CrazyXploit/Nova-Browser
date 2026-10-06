@@ -1,9 +1,12 @@
 package com.nova.browser.ui.browser
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
 import android.util.Log
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.DownloadListener
@@ -13,6 +16,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -28,6 +32,8 @@ import com.nova.browser.data.DataSaver
 import com.nova.browser.data.ErudaManager
 import com.nova.browser.data.ImageQualityManager
 import com.nova.browser.data.MediaSniffer
+import com.nova.browser.data.NightModeInjector
+import com.nova.browser.data.SpeedDialManager
 import com.nova.browser.data.UserAgentManager
 
 private const val TAG = "NovaWebView"
@@ -45,10 +51,13 @@ fun WebViewContainer(
     userAgentMode: UserAgentManager.Mode,
     imageQuality: ImageQualityManager.Quality,
     dataSaver: Boolean,
+    nightModeActive: Boolean,
+    isSystemDark: Boolean,
     onPageStarted: () -> Unit,
     onProgress: (Int) -> Unit,
     onPageFinished: (String, String, String?) -> Unit,
     onDownloadStart: (String, String?, String?, String?, Long) -> Unit,
+    onSwipeBack: () -> Unit,
     onWebViewCreated: (WebView) -> Unit = {},
 ) {
     val holder = remember { WebViewHolder() }
@@ -58,6 +67,7 @@ fun WebViewContainer(
     val currentOnPageFinished by rememberUpdatedState(onPageFinished)
     val currentOnDownloadStart by rememberUpdatedState(onDownloadStart)
     val currentOnWebViewCreated by rememberUpdatedState(onWebViewCreated)
+    val currentOnSwipeBack by rememberUpdatedState(onSwipeBack)
 
     LaunchedEffect(userAgentMode) {
         val wv = holder.webView ?: return@LaunchedEffect
@@ -75,6 +85,17 @@ fun WebViewContainer(
                 wv.evaluateJavascript(ImageQualityManager.buildLowQualityJs(), null)
             } catch (_: Exception) { }
         }
+    }
+
+    LaunchedEffect(nightModeActive) {
+        val wv = holder.webView ?: return@LaunchedEffect
+        try {
+            if (nightModeActive) {
+                wv.evaluateJavascript(NightModeInjector.buildCss(), null)
+            } else {
+                wv.evaluateJavascript(NightModeInjector.removeCss(), null)
+            }
+        } catch (_: Exception) { }
     }
 
     AndroidView(
@@ -140,14 +161,9 @@ fun WebViewContainer(
                             return AdBlocker.blockedResponse()
                         }
 
-                        // === MEDIA SNIFF with content-length + type ===
                         if (request.method == "GET") {
-                            val headers = request.requestHeaders ?: emptyMap()
-                            val ct = headers["Accept"]?.let { null } ?: null
-
-                            // WebResourceRequest doesn't expose response headers — we sniff URL + hint CT
-                            val hinted = guessContentType(uri.toString())
-                            MediaSniffer.sniff(uri.toString(), hinted, 0L)
+                            val ct = guessContentType(uri.toString())
+                            MediaSniffer.sniff(uri.toString(), ct, 0L)
                         }
 
                         if (ImageQualityManager.shouldBlockImages()) {
@@ -174,13 +190,20 @@ fun WebViewContainer(
 
                     override fun onPageFinished(view: WebView?, url: String?) {
                         if (ErudaManager.enabled && url != HOME_PLACEHOLDER) injectEruda(view)
+
+                        // Night mode on every load
+                        if (nightModeActive && view != null) {
+                            try {
+                                view.evaluateJavascript(NightModeInjector.buildCss(), null)
+                            } catch (_: Exception) { }
+                        }
+
                         if (ImageQualityManager.dataSaver && view != null) {
                             try {
                                 view.evaluateJavascript(ImageQualityManager.buildLowQualityJs(), null)
                             } catch (_: Exception) { }
                         }
 
-                        // Probe media metadata in page
                         if (view != null) injectMediaProbe(view)
 
                         val faviconUrl = url?.let { pageUrl ->
@@ -190,6 +213,12 @@ fun WebViewContainer(
                                 "${uri.scheme ?: "https"}://$host/favicon.ico"
                             } catch (_: Exception) { null }
                         }
+
+                        // Speed dial — record visit
+                        if (url != null && url != HOME_PLACEHOLDER) {
+                            SpeedDialManager.recordVisit(url, view?.title ?: "", faviconUrl)
+                        }
+
                         currentOnPageFinished(url ?: "", view?.title ?: "", faviconUrl)
                     }
                 }
@@ -204,9 +233,6 @@ fun WebViewContainer(
                             parseMediaProbe(msg.removePrefix("NOVA_MEDIA:"))
                             return true
                         }
-                        if (msg.contains("Nova:") || msg.contains("Eruda")) {
-                            Log.d(TAG, "[Nova] $msg")
-                        }
                         return true
                     }
                 }
@@ -217,9 +243,33 @@ fun WebViewContainer(
                     }
                 )
 
+                // Swipe-from-left-edge to go back
+                val gestureDetector = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
+                    override fun onFling(
+                        e1: MotionEvent?,
+                        e2: MotionEvent?,
+                        velocityX: Float,
+                        velocityY: Float,
+                    ): Boolean {
+                        if (e1 == null || e2 == null) return false
+                        val dx = e2.x - e1.x
+                        val dy = e2.y - e1.y
+                        // Swipe from left edge, fast, mostly horizontal
+                        if (e1.x < 60f && dx > 150f && kotlin.math.abs(dy) < 100f) {
+                            currentOnSwipeBack()
+                            return true
+                        }
+                        return false
+                    }
+                })
+
+                setOnTouchListener { _, event ->
+                    gestureDetector.onTouchEvent(event)
+                    false
+                }
+
                 CookieManager.getInstance().setAcceptCookie(true)
-                CookieManager.getInstance()
-                    .setAcceptThirdPartyCookies(this, !isIncognito)
+                CookieManager.getInstance().setAcceptThirdPartyCookies(this, !isIncognito)
 
                 tag = initialUrl
                 holder.webView = this
@@ -291,42 +341,30 @@ private fun injectEruda(view: WebView?) {
     } catch (_: Exception) { }
 }
 
-/**
- * Probes DOM for <video>, <audio>, <img> sizes/durations + Content-Length via fetch HEAD.
- * Emits NOVA_MEDIA:<json> messages we parse in onConsoleMessage.
- */
 private fun injectMediaProbe(view: WebView) {
     val js = """
         (function() {
             if (window.__novaMediaProbe) return;
             window.__novaMediaProbe = true;
 
-            function fmt(ms) { return Math.floor(ms); }
-
             function probeVideo(v) {
                 try {
                     var src = v.currentSrc || v.src;
                     if (!src) return;
-                    var duration = isFinite(v.duration) ? fmt(v.duration * 1000) : 0;
+                    var duration = isFinite(v.duration) ? Math.floor(v.duration * 1000) : 0;
                     var w = v.videoWidth || 0;
                     var h = v.videoHeight || 0;
-                    console.log('NOVA_MEDIA:' + JSON.stringify({
-                        url: src, durationMs: duration, width: w, height: h
-                    }));
+                    console.log('NOVA_MEDIA:' + JSON.stringify({url:src,durationMs:duration,width:w,height:h}));
                 } catch(e) {}
             }
-
             function probeAudio(a) {
                 try {
                     var src = a.currentSrc || a.src;
                     if (!src) return;
-                    var duration = isFinite(a.duration) ? fmt(a.duration * 1000) : 0;
-                    console.log('NOVA_MEDIA:' + JSON.stringify({
-                        url: src, durationMs: duration, width: 0, height: 0
-                    }));
+                    var duration = isFinite(a.duration) ? Math.floor(a.duration * 1000) : 0;
+                    console.log('NOVA_MEDIA:' + JSON.stringify({url:src,durationMs:duration,width:0,height:0}));
                 } catch(e) {}
             }
-
             function probeImage(img) {
                 try {
                     var src = img.currentSrc || img.src;
@@ -334,12 +372,9 @@ private fun injectMediaProbe(view: WebView) {
                     var w = img.naturalWidth || 0;
                     var h = img.naturalHeight || 0;
                     if (w === 0) return;
-                    console.log('NOVA_MEDIA:' + JSON.stringify({
-                        url: src, durationMs: 0, width: w, height: h
-                    }));
+                    console.log('NOVA_MEDIA:' + JSON.stringify({url:src,durationMs:0,width:w,height:h}));
                 } catch(e) {}
             }
-
             function probeAll() {
                 try {
                     document.querySelectorAll('video').forEach(probeVideo);
@@ -347,16 +382,10 @@ private fun injectMediaProbe(view: WebView) {
                     document.querySelectorAll('img').forEach(probeImage);
                 } catch(e) {}
             }
-
-            // Initial scan
             probeAll();
-
-            // Watch for dynamic media
             try {
-                var obs = new MutationObserver(function() {
-                    probeAll();
-                });
-                obs.observe(document.documentElement, { childList: true, subtree: true });
+                var obs = new MutationObserver(probeAll);
+                obs.observe(document.documentElement, {childList: true, subtree: true});
             } catch(e) {}
         })();
     """.trimIndent()
@@ -370,33 +399,19 @@ private fun parseMediaProbe(json: String) {
     try {
         val trimmed = json.trim()
         if (!trimmed.startsWith("{")) return
-
         val url = extractString(trimmed, "url") ?: return
         val durationMs = extractLong(trimmed, "durationMs") ?: 0L
         val width = extractInt(trimmed, "width") ?: 0
         val height = extractInt(trimmed, "height") ?: 0
-
-        MediaSniffer.updateMetadata(
-            url = url,
-            durationMs = durationMs,
-            widthPx = width,
-            heightPx = height,
-        )
+        MediaSniffer.updateMetadata(url, durationMs, width, height)
     } catch (_: Exception) { }
 }
 
-// Tiny JSON extractors — avoid pulling in a parser just for this
-private fun extractString(json: String, key: String): String? {
-    val pattern = "\"$key\"\\s*:\\s*\"([^\"]*)\"".toRegex()
-    return pattern.find(json)?.groupValues?.get(1)
-}
+private fun extractString(json: String, key: String): String? =
+    "\"$key\"\\s*:\\s*\"([^\"]*)\"".toRegex().find(json)?.groupValues?.get(1)
 
-private fun extractLong(json: String, key: String): Long? {
-    val pattern = "\"$key\"\\s*:\\s*(-?\\d+)".toRegex()
-    return pattern.find(json)?.groupValues?.get(1)?.toLongOrNull()
-}
+private fun extractLong(json: String, key: String): Long? =
+    "\"$key\"\\s*:\\s*(-?\\d+)".toRegex().find(json)?.groupValues?.get(1)?.toLongOrNull()
 
-private fun extractInt(json: String, key: String): Int? {
-    val pattern = "\"$key\"\\s*:\\s*(-?\\d+)".toRegex()
-    return pattern.find(json)?.groupValues?.get(1)?.toIntOrNull()
-}
+private fun extractInt(json: String, key: String): Int? =
+    "\"$key\"\\s*:\\s*(-?\\d+)".toRegex().find(json)?.groupValues?.get(1)?.toIntOrNull()
