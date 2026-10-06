@@ -17,10 +17,12 @@ import com.nova.browser.data.DownloadManagerHelper
 import com.nova.browser.data.ErudaManager
 import com.nova.browser.data.HistoryDao
 import com.nova.browser.data.HistoryEntity
+import com.nova.browser.data.HomeBackgroundManager
 import com.nova.browser.data.ImageQualityManager
 import com.nova.browser.data.MediaSniffer
 import com.nova.browser.data.MyIpFetcher
 import com.nova.browser.data.NightModeInjector
+import com.nova.browser.data.ReaderModeInjector
 import com.nova.browser.data.SearchEngineManager
 import com.nova.browser.data.SpeedDialManager
 import com.nova.browser.data.TabDao
@@ -64,6 +66,7 @@ data class BrowserUiState(
     val showUserAgentPicker: Boolean = false,
     val showImageQualityPicker: Boolean = false,
     val showSearchEnginePicker: Boolean = false,
+    val showHomeBackgroundPicker: Boolean = false,
     val showInPageFind: Boolean = false,
     val showMediaPanel: Boolean = false,
     val mediaItems: List<MediaSniffer.MediaItem> = emptyList(),
@@ -82,6 +85,8 @@ data class BrowserUiState(
     val dataSaver: Boolean = false,
     val nightMode: NightModeInjector.Mode = NightModeInjector.Mode.AUTO,
     val isSystemDark: Boolean = true,
+    val readerModeActive: Boolean = false,
+    val homeBackground: HomeBackgroundManager.Preset = HomeBackgroundManager.Preset.NOVA,
     val trackersBlocked: Int = 0,
     val searchEngineId: String = "duckduckgo",
     val searchEngineName: String = "DuckDuckGo",
@@ -95,7 +100,6 @@ data class BrowserUiState(
     val statsTimeSpentMs: Long = 0,
     val statsDataSavedBytes: Long = 0,
     val topSites: List<SpeedDialManager.Site> = emptyList(),
-    val fullscreenVideo: Boolean = false,
 ) {
     val activeTab: TabEntity? get() = tabs.firstOrNull { it.id == activeTabId }
     val nightModeActive: Boolean get() = when (nightMode) {
@@ -164,9 +168,12 @@ class BrowserViewModel @Inject constructor(
 
     val swipeBack: () -> Unit = {
         val wv = webViewRef
-        if (wv != null && wv.canGoBack()) {
-            wv.goBack()
-        }
+        if (wv != null && wv.canGoBack()) wv.goBack()
+    }
+
+    val swipeForward: () -> Unit = {
+        val wv = webViewRef
+        if (wv != null && wv.canGoForward()) wv.goForward()
     }
 
     val findText: (String) -> Unit = { query ->
@@ -245,6 +252,7 @@ class BrowserViewModel @Inject constructor(
         UsageStats.load(ctx)
         NightModeInjector.load(ctx)
         SpeedDialManager.load(ctx)
+        HomeBackgroundManager.load(ctx)
 
         val isDark = try {
             val uiMode = ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
@@ -262,6 +270,7 @@ class BrowserViewModel @Inject constructor(
                 searchEngineName = SearchEngineManager.current.name,
                 nightMode = NightModeInjector.mode,
                 isSystemDark = isDark,
+                homeBackground = HomeBackgroundManager.preset,
             )
         }
 
@@ -289,7 +298,6 @@ class BrowserViewModel @Inject constructor(
             if (tabDao.observeAll().first().isEmpty()) createTab(HOME_PLACEHOLDER)
         }
 
-        // Speed dial updates
         viewModelScope.launch {
             SpeedDialManager.topSites.collect { sites ->
                 _state.update { it.copy(topSites = sites) }
@@ -371,7 +379,7 @@ class BrowserViewModel @Inject constructor(
         }
     }
 
-    // ── Home / New tab ─────────────────────────────────────
+    // ── Home ───────────────────────────────────────────────
     val openHomeTab: () -> Unit = {
         viewModelScope.launch { createTab(HOME_PLACEHOLDER) }
     }
@@ -477,6 +485,8 @@ class BrowserViewModel @Inject constructor(
     val closeImageQualityPicker: () -> Unit = { _state.update { it.copy(showImageQualityPicker = false) } }
     val openSearchEnginePicker: () -> Unit = { _state.update { it.copy(showSearchEnginePicker = true) } }
     val closeSearchEnginePicker: () -> Unit = { _state.update { it.copy(showSearchEnginePicker = false) } }
+    val openHomeBackgroundPicker: () -> Unit = { _state.update { it.copy(showHomeBackgroundPicker = true) } }
+    val closeHomeBackgroundPicker: () -> Unit = { _state.update { it.copy(showHomeBackgroundPicker = false) } }
     val closeLongPress: () -> Unit = { _state.update { it.copy(longPressTarget = null) } }
 
     // ── Search engine ──────────────────────────────────────
@@ -503,7 +513,6 @@ class BrowserViewModel @Inject constructor(
         NightModeInjector.updateMode(next)
         NightModeInjector.save(getApplication())
         _state.update { it.copy(nightMode = next) }
-        // Reapply
         val wv = webViewRef
         if (wv != null) {
             try {
@@ -513,6 +522,32 @@ class BrowserViewModel @Inject constructor(
                     wv.evaluateJavascript(NightModeInjector.removeCss(), null)
                 }
             } catch (_: Exception) { }
+        }
+    }
+
+    // ── Reader mode ────────────────────────────────────────
+    val toggleReaderMode: () -> Unit = {
+        val wv = webViewRef
+        if (wv != null) {
+            val newActive = !ReaderModeInjector.active
+            ReaderModeInjector.active = newActive
+            try {
+                if (newActive) {
+                    wv.evaluateJavascript(ReaderModeInjector.buildScript(), null)
+                } else {
+                    wv.reload()
+                }
+            } catch (_: Exception) { }
+            _state.update { it.copy(readerModeActive = newActive) }
+        }
+    }
+
+    // ── Home background ────────────────────────────────────
+    val selectHomeBackground: (HomeBackgroundManager.Preset) -> Unit = { p ->
+        HomeBackgroundManager.updatePreset(p)
+        HomeBackgroundManager.save(getApplication())
+        _state.update {
+            it.copy(homeBackground = p, showHomeBackgroundPicker = false)
         }
     }
 
@@ -592,10 +627,7 @@ class BrowserViewModel @Inject constructor(
     }
 
     // ── Speed dial ─────────────────────────────────────────
-    val openSpeedDial: (String) -> Unit = { url ->
-        navigate(url)
-    }
-
+    val openSpeedDial: (String) -> Unit = { url -> navigate(url) }
     val removeSpeedDial: (SpeedDialManager.Site) -> Unit = { site ->
         SpeedDialManager.remove(site.host, getApplication())
     }
@@ -687,8 +719,10 @@ class BrowserViewModel @Inject constructor(
                     isCurrentUrlBookmarked = bm != null,
                     urlInput = if (s.showUrlPopup) s.urlInput else url,
                     isHomeVisible = false,
+                    readerModeActive = false,   // reset on new page
                 )
             }
+            ReaderModeInjector.active = false
         }
     }
 
@@ -778,5 +812,6 @@ class BrowserViewModel @Inject constructor(
         UsageStats.addSessionTime(delta)
         UsageStats.save(getApplication())
         SpeedDialManager.save(getApplication())
+        HomeBackgroundManager.save(getApplication())
     }
 }
