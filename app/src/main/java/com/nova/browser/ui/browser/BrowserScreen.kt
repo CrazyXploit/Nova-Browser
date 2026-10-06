@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nova.browser.ui.home.HomeBackgroundPicker
 import com.nova.browser.ui.home.HomeDashboard
 
 private const val HOME_PLACEHOLDER = "about:home"
@@ -41,6 +42,7 @@ fun BrowserScreen(
     BackHandler(enabled = state.showUserAgentPicker) { vm.closeUserAgentPicker() }
     BackHandler(enabled = state.showImageQualityPicker) { vm.closeImageQualityPicker() }
     BackHandler(enabled = state.showSearchEnginePicker) { vm.closeSearchEnginePicker() }
+    BackHandler(enabled = state.showHomeBackgroundPicker) { vm.closeHomeBackgroundPicker() }
 
     BackHandler(enabled = !state.isHomeVisible) { vm.goBackOrHome() }
 
@@ -101,10 +103,12 @@ fun BrowserScreen(
                             timeSpentMs = state.statsTimeSpentMs,
                             dataSavedBytes = state.statsDataSavedBytes,
                             topSites = state.topSites,
+                            homeBackground = state.homeBackground,
                             onSearch = vm.searchFromHome,
                             onOpenSite = vm.openSpeedDial,
-                            onAddSite = { /* TODO: add custom site dialog */ },
+                            onAddSite = { /* TODO */ },
                             onLongPressSite = vm.removeSpeedDial,
+                            onCustomizeBackground = vm.openHomeBackgroundPicker,
                         )
                     } else {
                         WebViewContainer(
@@ -120,6 +124,7 @@ fun BrowserScreen(
                             onPageFinished = vm.onPageFinished,
                             onDownloadStart = vm.onDownloadStart,
                             onSwipeBack = vm.swipeBack,
+                            onSwipeForward = vm.swipeForward,
                             onWebViewCreated = { wv -> vm.attachWebView(wv) },
                         )
                     }
@@ -188,6 +193,14 @@ fun BrowserScreen(
             )
         }
 
+        if (state.showHomeBackgroundPicker) {
+            HomeBackgroundPicker(
+                current = state.homeBackground,
+                onPick = vm.selectHomeBackground,
+                onDismiss = vm.closeHomeBackgroundPicker,
+            )
+        }
+
         InPageFind(
             visible = state.showInPageFind,
             matchCount = state.findMatchCount,
@@ -252,11 +265,16 @@ fun BrowserScreen(
             com.nova.browser.data.NightModeInjector.Mode.ON -> "On"
             com.nova.browser.data.NightModeInjector.Mode.OFF -> "Off"
         },
+        readerModeActive = state.readerModeActive,
         onToggleAdBlock = vm.toggleAdBlock,
         onToggleEruda = vm.toggleEruda,
         onToggleDesktop = vm.toggleDesktopMode,
         onToggleIncognito = vm.toggleIncognito,
         onCycleNightMode = vm.cycleNightMode,
+        onToggleReader = {
+            vm.closeOverlayMenu()
+            vm.toggleReaderMode()
+        },
         onUserAgent = { vm.closeOverlayMenu(); vm.openUserAgentPicker() },
         onMyIp = { vm.closeOverlayMenu(); vm.openIpOverlay() },
         onImageQuality = { vm.closeOverlayMenu(); vm.openImageQualityPicker() },
