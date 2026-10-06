@@ -1,6 +1,11 @@
 package com.nova.browser.ui.browser
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,7 +42,6 @@ fun BrowserScreen(
     BackHandler(enabled = state.showImageQualityPicker) { vm.closeImageQualityPicker() }
     BackHandler(enabled = state.showSearchEnginePicker) { vm.closeSearchEnginePicker() }
 
-    // System back → go to home when not already there
     BackHandler(enabled = !state.isHomeVisible) { vm.goBackOrHome() }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -81,29 +85,37 @@ fun BrowserScreen(
                     .padding(padding)
                     .fillMaxSize()
             ) {
-                if (state.isHomeVisible) {
-                    HomeDashboard(
-                        engineName = state.searchEngineName,
-                        trackersBlocked = state.statsTrackers,
-                        adsBlocked = state.statsAds,
-                        timeSavedMs = state.statsTimeSavedMs,
-                        timeSpentMs = state.statsTimeSpentMs,
-                        dataSavedBytes = state.statsDataSavedBytes,
-                        onSearch = vm.searchFromHome,
-                    )
-                } else {
-                    WebViewContainer(
-                        initialUrl = state.activeTab?.url.orEmpty(),
-                        isIncognito = state.isIncognito,
-                        userAgentMode = state.userAgentMode,
-                        imageQuality = state.imageQuality,
-                        dataSaver = state.dataSaver,
-                        onPageStarted = vm.onPageStarted,
-                        onProgress = vm.onProgress,
-                        onPageFinished = vm.onPageFinished,
-                        onDownloadStart = vm.onDownloadStart,
-                        onWebViewCreated = { wv -> vm.attachWebView(wv) },
-                    )
+                AnimatedContent(
+                    targetState = state.isHomeVisible,
+                    transitionSpec = {
+                        fadeIn(tween(220)) togetherWith fadeOut(tween(180))
+                    },
+                    label = "home_content",
+                ) { isHome ->
+                    if (isHome) {
+                        HomeDashboard(
+                            engineName = state.searchEngineName,
+                            trackersBlocked = state.statsTrackers,
+                            adsBlocked = state.statsAds,
+                            timeSavedMs = state.statsTimeSavedMs,
+                            timeSpentMs = state.statsTimeSpentMs,
+                            dataSavedBytes = state.statsDataSavedBytes,
+                            onSearch = vm.searchFromHome,
+                        )
+                    } else {
+                        WebViewContainer(
+                            initialUrl = state.activeTab?.url.orEmpty(),
+                            isIncognito = state.isIncognito,
+                            userAgentMode = state.userAgentMode,
+                            imageQuality = state.imageQuality,
+                            dataSaver = state.dataSaver,
+                            onPageStarted = vm.onPageStarted,
+                            onProgress = vm.onProgress,
+                            onPageFinished = vm.onPageFinished,
+                            onDownloadStart = vm.onDownloadStart,
+                            onWebViewCreated = { wv -> vm.attachWebView(wv) },
+                        )
+                    }
                 }
             }
         }
