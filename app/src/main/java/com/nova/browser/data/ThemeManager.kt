@@ -27,7 +27,10 @@ object ThemeManager {
             .apply()
     }
 
-    fun setMode(newMode: Mode) { mode = newMode }
+    // Renamed from setMode -> updateMode to avoid JVM clash with the var setter
+    fun updateMode(newMode: Mode) {
+        mode = newMode
+    }
 
     fun isDark(context: Context): Boolean = when (mode) {
         Mode.DARK -> true
