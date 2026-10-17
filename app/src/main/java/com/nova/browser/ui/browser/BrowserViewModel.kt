@@ -25,12 +25,14 @@ import com.nova.browser.data.NightModeInjector
 import com.nova.browser.data.ReaderModeInjector
 import com.nova.browser.data.SearchEngineManager
 import com.nova.browser.data.SpeedDialManager
+import com.nova.browser.data.SpeedTuning
 import com.nova.browser.data.TabDao
 import com.nova.browser.data.TabEntity
 import com.nova.browser.data.UsageStats
 import com.nova.browser.data.UserAgentManager
 import com.nova.browser.util.UrlUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -132,6 +134,8 @@ class BrowserViewModel @Inject constructor(
 
     @Volatile private var webViewRef: android.webkit.WebView? = null
     private var sessionStartTime = 0L
+    private var progressJob: Job? = null
+    private var pendingProgress = 0
 
     fun attachWebView(wv: android.webkit.WebView) {
         webViewRef = wv
@@ -170,7 +174,6 @@ class BrowserViewModel @Inject constructor(
         val wv = webViewRef
         if (wv != null && wv.canGoBack()) wv.goBack()
     }
-
     val swipeForward: () -> Unit = {
         val wv = webViewRef
         if (wv != null && wv.canGoForward()) wv.goForward()
@@ -677,10 +680,17 @@ class BrowserViewModel @Inject constructor(
         if (!_state.value.isLoading) _state.update { it.copy(isLoading = true) }
     }
 
+    // ═══ DEBOUNCED PROGRESS — 250ms max ═══
     val onProgress: (Int) -> Unit = { p ->
-        val c = _state.value.progress
-        if (c / 10 != p / 10 || p == 100) {
-            _state.update { it.copy(progress = p) }
+        pendingProgress = p
+        if (progressJob?.isActive == true) return@onProgress
+        progressJob = viewModelScope.launch {
+            delay(SpeedTuning.PROGRESS_UPDATE_MS)
+            val finalP = pendingProgress
+            val c = _state.value.progress
+            if (c / 10 != finalP / 10 || finalP == 100) {
+                _state.update { it.copy(progress = finalP) }
+            }
         }
     }
 
@@ -719,7 +729,7 @@ class BrowserViewModel @Inject constructor(
                     isCurrentUrlBookmarked = bm != null,
                     urlInput = if (s.showUrlPopup) s.urlInput else url,
                     isHomeVisible = false,
-                    readerModeActive = false,   // reset on new page
+                    readerModeActive = false,
                 )
             }
             ReaderModeInjector.active = false

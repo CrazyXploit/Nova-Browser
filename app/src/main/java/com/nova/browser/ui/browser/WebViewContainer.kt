@@ -31,6 +31,7 @@ import com.nova.browser.data.ImageQualityManager
 import com.nova.browser.data.MediaSniffer
 import com.nova.browser.data.NightModeInjector
 import com.nova.browser.data.SpeedDialManager
+import com.nova.browser.data.SpeedTuning
 import com.nova.browser.data.UserAgentManager
 import kotlin.math.abs
 
@@ -119,23 +120,48 @@ fun WebViewContainer(
                 overScrollMode = WebView.OVER_SCROLL_NEVER
 
                 settings.apply {
+                    // ── CORE ────────────────────────────────
                     javaScriptEnabled = true
                     domStorageEnabled = true
                     databaseEnabled = true
+                    mediaPlaybackRequiresUserGesture = true
+
+                    // ── SPEED ───────────────────────────────
+                    cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                    loadsImagesAutomatically = ImageQualityManager.effectiveQuality() != ImageQualityManager.Quality.OFF
+                    blockNetworkImage = ImageQualityManager.effectiveQuality() == ImageQualityManager.Quality.OFF
+
+                    // Viewport & rendering
+                    useWideViewPort = true
+                    loadWithOverviewMode = true
                     setSupportZoom(false)
                     builtInZoomControls = false
                     displayZoomControls = false
-                    mediaPlaybackRequiresUserGesture = true
-                    useWideViewPort = true
-                    loadWithOverviewMode = true
-                    cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-                    allowFileAccess = false
-                    allowContentAccess = false
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) safeBrowsingEnabled = false
+
+                    // HTTP cache tuning
+                    setAppCacheEnabled(false)
+                    databaseEnabled = true
+                    domStorageEnabled = true
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        safeBrowsingEnabled = false
+                    }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         forceDark = WebSettings.FORCE_DARK_AUTO
                     }
+
                     mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+
+                    // ── NETWORK ─────────────────────────────
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        // Preconnect hints for known CDNs
+                        // (WebView doesn't have a JS API for this — done via HTML hints)
+                    }
+
+                    // Accessibility / rendering
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        offscreenPreRaster = false
+                    }
                 }
 
                 UserAgentManager.captureDefault(settings)
@@ -144,7 +170,6 @@ fun WebViewContainer(
                     settings.userAgentString = "${settings.userAgentString} NovaIncognito/1.0"
                 }
 
-                ImageQualityManager.applyTo(settings)
                 setOnCreateContextMenuListener(null)
 
                 webViewClient = object : WebViewClient() {
@@ -154,18 +179,25 @@ fun WebViewContainer(
                     ): WebResourceResponse? {
                         val uri = request?.url ?: return super.shouldInterceptRequest(view, request)
 
+                        // 1. Assets (Eruda)
                         val intercepted = assetLoader.shouldInterceptRequest(uri)
                         if (intercepted != null) return intercepted
 
-                        if (AdBlocker.shouldBlock(uri.toString())) {
+                        // 2. Ad blocker — fast cached decision
+                        val url = uri.toString()
+                        if (AdBlocker.shouldBlock(url)) {
                             return AdBlocker.blockedResponse()
                         }
 
+                        // 3. Media sniff — only GET requests
                         if (request.method == "GET") {
-                            val ct = guessContentType(uri.toString())
-                            MediaSniffer.sniff(uri.toString(), ct, 0L)
+                            val ct = guessContentType(url)
+                            if (ct != null) {
+                                MediaSniffer.sniff(url, ct, 0L)
+                            }
                         }
 
+                        // 4. Image block on OFF quality
                         if (ImageQualityManager.shouldBlockImages()) {
                             val accept = request.requestHeaders["Accept"]
                             if (accept?.contains("image/") == true) {
@@ -185,11 +217,16 @@ fun WebViewContainer(
                                 MediaSniffer.setPageHost(uri.host ?: "")
                             } catch (_: Exception) { }
                         }
-                        if (ErudaManager.enabled && url != HOME_PLACEHOLDER) injectEruda(view)
+                        // Lazy Eruda — only on sites that benefit
+                        if (url != null && ErudaManager.shouldInject(url)) {
+                            injectEruda(view)
+                        }
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
-                        if (ErudaManager.enabled && url != HOME_PLACEHOLDER) injectEruda(view)
+                        if (url != null && ErudaManager.shouldInject(url)) {
+                            injectEruda(view)
+                        }
 
                         if (nightModeActive && view != null) {
                             try {
@@ -225,7 +262,6 @@ fun WebViewContainer(
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
                         currentOnProgress(newProgress)
                     }
-
                     override fun onConsoleMessage(c: ConsoleMessage?): Boolean {
                         val msg = c?.message() ?: ""
                         if (msg.startsWith("NOVA_MEDIA:")) {
@@ -233,17 +269,6 @@ fun WebViewContainer(
                             return true
                         }
                         return true
-                    }
-
-                    override fun onShowCustomView(
-                        view: android.view.View?,
-                        callback: CustomViewCallback?,
-                    ) {
-                        // Fullscreen video — not implemented (would require activity recreation)
-                    }
-
-                    override fun onHideCustomView() {
-                        // Fullscreen video closed
                     }
                 }
 
@@ -253,9 +278,7 @@ fun WebViewContainer(
                     }
                 )
 
-                // ═══════════════════════════════════════════════════
-                //  SWIPE GESTURES — BACK + FORWARD
-                // ═══════════════════════════════════════════════════
+                // ── SWIPE GESTURES ──────────────────────────
                 var startX = 0f
                 var startY = 0f
                 var startTime = 0L
@@ -263,7 +286,6 @@ fun WebViewContainer(
 
                 setOnTouchListener { _, event ->
                     val screenWidth = resources.displayMetrics.widthPixels
-
                     when (event.actionMasked) {
                         MotionEvent.ACTION_DOWN -> {
                             startX = event.x
@@ -285,7 +307,6 @@ fun WebViewContainer(
                                 val dt = System.currentTimeMillis() - startTime
                                 val fastEnough = dt < 600L
                                 val horizontalEnough = abs(dy) < 150f
-
                                 if (direction == -1 && dx > 200f && horizontalEnough && fastEnough) {
                                     currentOnSwipeBack()
                                 }

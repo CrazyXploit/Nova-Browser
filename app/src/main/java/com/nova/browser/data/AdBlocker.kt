@@ -2,6 +2,7 @@ package com.nova.browser.data
 
 import android.webkit.WebResourceResponse
 import java.io.ByteArrayInputStream
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 object AdBlocker {
@@ -26,6 +27,9 @@ object AdBlocker {
         "/analytics/", "/pixel/", "/beacon/",
     )
 
+    /** Hot cache — recently checked URLs. Avoids re-scanning. */
+    private val decisionCache = ConcurrentHashMap<String, Boolean>(512)
+
     private val emptyResponse: WebResourceResponse by lazy {
         WebResourceResponse(
             "text/plain",
@@ -43,23 +47,38 @@ object AdBlocker {
 
     fun shouldBlock(url: String?): Boolean {
         if (!enabled || url.isNullOrEmpty()) return false
+
+        // Hot cache hit
+        decisionCache[url]?.let { return it }
+
         val lower = url.lowercase()
+        var block = false
 
         for (host in blockedHosts) {
             if (lower.contains(host)) {
                 trackersBlocked = _trackerCount.incrementAndGet()
                 DataSaver.onBlockedResource()
-                return true
+                block = true
+                break
             }
         }
-        for (kw in blockedKeywords) {
-            if (lower.contains(kw)) {
-                adsBlocked = _adCount.incrementAndGet()
-                DataSaver.onBlockedResource()
-                return true
+
+        if (!block) {
+            for (kw in blockedKeywords) {
+                if (lower.contains(kw)) {
+                    adsBlocked = _adCount.incrementAndGet()
+                    DataSaver.onBlockedResource()
+                    block = true
+                    break
+                }
             }
         }
-        return false
+
+        // Cache decision
+        if (decisionCache.size < 500) {
+            decisionCache[url] = block
+        }
+        return block
     }
 
     fun blockedResponse(): WebResourceResponse = emptyResponse
@@ -71,5 +90,6 @@ object AdBlocker {
         _adCount.set(0)
         trackersBlocked = 0
         adsBlocked = 0
+        decisionCache.clear()
     }
 }
