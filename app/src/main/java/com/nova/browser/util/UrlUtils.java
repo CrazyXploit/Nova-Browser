@@ -5,9 +5,6 @@ import androidx.annotation.NonNull;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 
-/**
- * URL normalization. Uses SearchEngineManager for search queries.
- */
 public final class UrlUtils {
 
     private UrlUtils() {}
@@ -24,7 +21,7 @@ public final class UrlUtils {
             return "https://" + trimmed;
         }
 
-        // Delegate search to the manager (handles current engine)
+        // Search via current engine (Google by default)
         return com.nova.browser.data.SearchEngineManager.INSTANCE.buildSearchUrl(trimmed);
     }
 

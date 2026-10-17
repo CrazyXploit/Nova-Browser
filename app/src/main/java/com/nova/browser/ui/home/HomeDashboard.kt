@@ -98,7 +98,6 @@ fun HomeDashboard(
                 .imePadding(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // ── Background picker button ──────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -124,7 +123,7 @@ fun HomeDashboard(
 
             Spacer(Modifier.height(20.dp))
 
-            // ── Logo ────────────────────────────────────
+            // Logo
             Box(
                 modifier = Modifier
                     .size(56.dp)
@@ -167,7 +166,7 @@ fun HomeDashboard(
 
             Spacer(Modifier.height(28.dp))
 
-            // ── Search bar ─────────────────────────────
+            // Search bar
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -188,7 +187,7 @@ fun HomeDashboard(
                     Box(Modifier.weight(1f)) {
                         if (query.isBlank()) {
                             Text(
-                                "Search or type URL",
+                                "Search Google or type URL",
                                 color = Color.White.copy(alpha = 0.5f),
                                 fontSize = 15.sp,
                             )
@@ -219,7 +218,7 @@ fun HomeDashboard(
 
             Spacer(Modifier.height(32.dp))
 
-            // ── Speed dial grid ────────────────────────
+            // Speed dial
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -235,27 +234,18 @@ fun HomeDashboard(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Minimal stat row ───────────────────────
+            // Stat row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 520.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                MiniStat(
-                    value = formatBytesShort(dataSavedBytes),
-                    label = "saved",
-                )
+                MiniStat(formatBytesShort(dataSavedBytes), "saved")
                 VerticalDivider()
-                MiniStat(
-                    value = "${trackersBlocked + adsBlocked}",
-                    label = "blocked",
-                )
+                MiniStat("${trackersBlocked + adsBlocked}", "blocked")
                 VerticalDivider()
-                MiniStat(
-                    value = formatTimeShort(timeSpentMs),
-                    label = "browsed",
-                )
+                MiniStat(formatTimeShort(timeSpentMs), "browsed")
             }
 
             Spacer(Modifier.height(32.dp))

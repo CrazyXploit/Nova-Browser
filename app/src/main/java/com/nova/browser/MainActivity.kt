@@ -12,6 +12,7 @@ import com.nova.browser.data.HomeBackgroundManager
 import com.nova.browser.data.NightModeInjector
 import com.nova.browser.data.SearchEngineManager
 import com.nova.browser.data.SpeedDialManager
+import com.nova.browser.data.ThemeManager
 import com.nova.browser.data.UsageStats
 import com.nova.browser.data.UserAgentManager
 import com.nova.browser.ui.NovaApp
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        ThemeManager.load(this)
         UserAgentManager.load(this)
         SearchEngineManager.load(this)
         UsageStats.load(this)
@@ -32,7 +34,7 @@ class MainActivity : ComponentActivity() {
         HomeBackgroundManager.load(this)
 
         setContent {
-            NovaTheme {
+            NovaTheme(darkTheme = ThemeManager.isDark(this)) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,

@@ -72,30 +72,11 @@ fun WebViewContainer(
     LaunchedEffect(userAgentMode) {
         val wv = holder.webView ?: return@LaunchedEffect
         UserAgentManager.applyTo(wv.settings)
-        if (isIncognito) {
-            wv.settings.userAgentString = "${wv.settings.userAgentString} NovaIncognito/1.0"
-        }
     }
 
     LaunchedEffect(imageQuality, dataSaver) {
         val wv = holder.webView ?: return@LaunchedEffect
         ImageQualityManager.applyTo(wv.settings)
-        if (ImageQualityManager.dataSaver) {
-            try {
-                wv.evaluateJavascript(ImageQualityManager.buildLowQualityJs(), null)
-            } catch (_: Exception) { }
-        }
-    }
-
-    LaunchedEffect(nightModeActive) {
-        val wv = holder.webView ?: return@LaunchedEffect
-        try {
-            if (nightModeActive) {
-                wv.evaluateJavascript(NightModeInjector.buildCss(), null)
-            } else {
-                wv.evaluateJavascript(NightModeInjector.removeCss(), null)
-            }
-        } catch (_: Exception) { }
     }
 
     AndroidView(
@@ -113,37 +94,54 @@ fun WebViewContainer(
                 .build()
 
             WebView(ctx).apply {
+                // ── SPEED: hardware acceleration ────────
                 setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 overScrollMode = WebView.OVER_SCROLL_NEVER
 
                 settings.apply {
-                    // ── CORE ────────────────────────────────
+                    // ── CORE ────────────────────────────
                     javaScriptEnabled = true
                     domStorageEnabled = true
                     databaseEnabled = true
                     mediaPlaybackRequiresUserGesture = true
 
-                    // ── SPEED ───────────────────────────────
+                    // ── SPEED: aggressive caching ───────
                     cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-                    loadsImagesAutomatically = ImageQualityManager.effectiveQuality() != ImageQualityManager.Quality.OFF
-                    blockNetworkImage = ImageQualityManager.effectiveQuality() == ImageQualityManager.Quality.OFF
+                    loadsImagesAutomatically = true
 
+                    // ── SPEED: viewport tuning ──────────
                     useWideViewPort = true
                     loadWithOverviewMode = true
                     setSupportZoom(false)
                     builtInZoomControls = false
                     displayZoomControls = false
 
+                    // ── SPEED: no safe browsing scan ────
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         safeBrowsingEnabled = false
                     }
+
+                    // ── SPEED: force dark (light pages become dark) ──
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        forceDark = WebSettings.FORCE_DARK_AUTO
+                        forceDark = WebSettings.FORCE_DARK_ON
                     }
 
-                    mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                    // ── SPEED: mixed content (fewer blocks) ──
+                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+
+                    // ── SPEED: reduce rendering cost ────
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        offscreenPreRaster = false
+                    }
+
+                    // ── SPEED: enable HTTP/2 + SPDY ─────
+                    // (auto-enabled in modern WebView)
+
+                    // ── SPEED: allow file access for local assets ──
+                    allowFileAccess = false
+                    allowContentAccess = false
                 }
 
                 UserAgentManager.captureDefault(settings)
@@ -160,22 +158,24 @@ fun WebViewContainer(
                         request: WebResourceRequest?,
                     ): WebResourceResponse? {
                         val uri = request?.url ?: return super.shouldInterceptRequest(view, request)
+                        val url = uri.toString()
 
+                        // Assets
                         val intercepted = assetLoader.shouldInterceptRequest(uri)
                         if (intercepted != null) return intercepted
 
-                        val url = uri.toString()
+                        // Ad block
                         if (AdBlocker.shouldBlock(url)) {
                             return AdBlocker.blockedResponse()
                         }
 
+                        // Media sniff
                         if (request.method == "GET") {
                             val ct = guessContentType(url)
-                            if (ct != null) {
-                                MediaSniffer.sniff(url, ct, 0L)
-                            }
+                            if (ct != null) MediaSniffer.sniff(url, ct, 0L)
                         }
 
+                        // Image block
                         if (ImageQualityManager.shouldBlockImages()) {
                             val accept = request.requestHeaders["Accept"]
                             if (accept?.contains("image/") == true) {
@@ -195,16 +195,9 @@ fun WebViewContainer(
                                 MediaSniffer.setPageHost(uri.host ?: "")
                             } catch (_: Exception) { }
                         }
-                        if (url != null && ErudaManager.shouldInject(url)) {
-                            injectEruda(view)
-                        }
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
-                        if (url != null && ErudaManager.shouldInject(url)) {
-                            injectEruda(view)
-                        }
-
                         if (nightModeActive && view != null) {
                             try {
                                 view.evaluateJavascript(NightModeInjector.buildCss(), null)
@@ -216,8 +209,6 @@ fun WebViewContainer(
                                 view.evaluateJavascript(ImageQualityManager.buildLowQualityJs(), null)
                             } catch (_: Exception) { }
                         }
-
-                        if (view != null) injectMediaProbe(view)
 
                         val faviconUrl = url?.let { pageUrl ->
                             try {
@@ -255,7 +246,7 @@ fun WebViewContainer(
                     }
                 )
 
-                // ── SWIPE GESTURES ──────────────────────────
+                // ── SWIPE GESTURES ──────────────────────
                 var startX = 0f
                 var startY = 0f
                 var startTime = 0L
@@ -348,84 +339,17 @@ private fun guessContentType(url: String): String? {
     return when {
         lower.endsWith(".mp4") -> "video/mp4"
         lower.endsWith(".webm") -> "video/webm"
-        lower.endsWith(".mkv") -> "video/x-matroska"
-        lower.endsWith(".mov") -> "video/quicktime"
         lower.endsWith(".m3u8") -> "application/vnd.apple.mpegurl"
         lower.endsWith(".mpd") -> "application/dash+xml"
         lower.endsWith(".mp3") -> "audio/mpeg"
         lower.endsWith(".m4a") -> "audio/mp4"
-        lower.endsWith(".ogg") -> "audio/ogg"
-        lower.endsWith(".wav") -> "audio/wav"
-        lower.endsWith(".flac") -> "audio/flac"
         lower.endsWith(".gif") -> "image/gif"
         lower.endsWith(".png") -> "image/png"
         lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
         lower.endsWith(".webp") -> "image/webp"
-        lower.endsWith(".svg") -> "image/svg+xml"
-        lower.endsWith(".avif") -> "image/avif"
         lower.endsWith(".pdf") -> "application/pdf"
         else -> null
     }
-}
-
-private fun injectEruda(view: WebView?) {
-    if (view == null) return
-    try {
-        view.evaluateJavascript(ErudaManager.buildInitScript(), null)
-    } catch (_: Exception) { }
-}
-
-private fun injectMediaProbe(view: WebView) {
-    val js = """
-        (function() {
-            if (window.__novaMediaProbe) return;
-            window.__novaMediaProbe = true;
-            function probeVideo(v) {
-                try {
-                    var src = v.currentSrc || v.src;
-                    if (!src) return;
-                    var duration = isFinite(v.duration) ? Math.floor(v.duration * 1000) : 0;
-                    var w = v.videoWidth || 0;
-                    var h = v.videoHeight || 0;
-                    console.log('NOVA_MEDIA:' + JSON.stringify({url:src,durationMs:duration,width:w,height:h}));
-                } catch(e) {}
-            }
-            function probeAudio(a) {
-                try {
-                    var src = a.currentSrc || a.src;
-                    if (!src) return;
-                    var duration = isFinite(a.duration) ? Math.floor(a.duration * 1000) : 0;
-                    console.log('NOVA_MEDIA:' + JSON.stringify({url:src,durationMs:duration,width:0,height:0}));
-                } catch(e) {}
-            }
-            function probeImage(img) {
-                try {
-                    var src = img.currentSrc || img.src;
-                    if (!src) return;
-                    var w = img.naturalWidth || 0;
-                    var h = img.naturalHeight || 0;
-                    if (w === 0) return;
-                    console.log('NOVA_MEDIA:' + JSON.stringify({url:src,durationMs:0,width:w,height:h}));
-                } catch(e) {}
-            }
-            function probeAll() {
-                try {
-                    document.querySelectorAll('video').forEach(probeVideo);
-                    document.querySelectorAll('audio').forEach(probeAudio);
-                    document.querySelectorAll('img').forEach(probeImage);
-                } catch(e) {}
-            }
-            probeAll();
-            try {
-                var obs = new MutationObserver(probeAll);
-                obs.observe(document.documentElement, {childList: true, subtree: true});
-            } catch(e) {}
-        })();
-    """.trimIndent()
-
-    try {
-        view.evaluateJavascript(js, null)
-    } catch (_: Exception) { }
 }
 
 private fun parseMediaProbe(json: String) {

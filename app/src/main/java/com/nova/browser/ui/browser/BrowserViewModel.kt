@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import android.content.res.Configuration
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -25,9 +24,9 @@ import com.nova.browser.data.NightModeInjector
 import com.nova.browser.data.ReaderModeInjector
 import com.nova.browser.data.SearchEngineManager
 import com.nova.browser.data.SpeedDialManager
-import com.nova.browser.data.SpeedTuning
 import com.nova.browser.data.TabDao
 import com.nova.browser.data.TabEntity
+import com.nova.browser.data.ThemeManager
 import com.nova.browser.data.UsageStats
 import com.nova.browser.data.UserAgentManager
 import com.nova.browser.util.UrlUtils
@@ -85,13 +84,13 @@ data class BrowserUiState(
     val imageQuality: ImageQualityManager.Quality = ImageQualityManager.Quality.HIGH,
     val effectiveQualityLabel: String = "High",
     val dataSaver: Boolean = false,
-    val nightMode: NightModeInjector.Mode = NightModeInjector.Mode.AUTO,
+    val nightMode: NightModeInjector.Mode = NightModeInjector.Mode.ON,
     val isSystemDark: Boolean = true,
     val readerModeActive: Boolean = false,
     val homeBackground: HomeBackgroundManager.Preset = HomeBackgroundManager.Preset.NOVA,
     val trackersBlocked: Int = 0,
-    val searchEngineId: String = "duckduckgo",
-    val searchEngineName: String = "DuckDuckGo",
+    val searchEngineId: String = "google",
+    val searchEngineName: String = "Google",
     val isCurrentUrlBookmarked: Boolean = false,
     val myIp: String = "",
     val myIpLoading: Boolean = false,
@@ -158,11 +157,7 @@ class BrowserViewModel @Inject constructor(
 
     val goBackOrHome: () -> Unit = {
         val wv = webViewRef
-        if (wv != null && wv.canGoBack()) {
-            wv.goBack()
-        } else {
-            goHome()
-        }
+        if (wv != null && wv.canGoBack()) wv.goBack() else goHome()
     }
     val goForward: () -> Unit = { webViewRef?.let { if (it.canGoForward()) it.goForward() } }
     val reload: () -> Unit = { webViewRef?.reload() }
@@ -201,9 +196,7 @@ class BrowserViewModel @Inject constructor(
     val openFind: () -> Unit = { _state.update { it.copy(showInPageFind = true) } }
 
     val openMediaPanel: () -> Unit = {
-        _state.update {
-            it.copy(showMediaPanel = true, mediaItems = MediaSniffer.list())
-        }
+        _state.update { it.copy(showMediaPanel = true, mediaItems = MediaSniffer.list()) }
     }
     val closeMediaPanel: () -> Unit = { _state.update { it.copy(showMediaPanel = false) } }
 
@@ -256,11 +249,13 @@ class BrowserViewModel @Inject constructor(
         NightModeInjector.load(ctx)
         SpeedDialManager.load(ctx)
         HomeBackgroundManager.load(ctx)
+        ThemeManager.load(ctx)
 
-        val isDark = try {
-            val uiMode = ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-            uiMode == Configuration.UI_MODE_NIGHT_YES
-        } catch (_: Exception) { true }
+        // Force night mode ON by default on first run
+        if (NightModeInjector.mode == NightModeInjector.Mode.AUTO) {
+            NightModeInjector.updateMode(NightModeInjector.Mode.ON)
+            NightModeInjector.save(ctx)
+        }
 
         _state.update {
             it.copy(
@@ -272,7 +267,7 @@ class BrowserViewModel @Inject constructor(
                 searchEngineId = SearchEngineManager.currentId,
                 searchEngineName = SearchEngineManager.current.name,
                 nightMode = NightModeInjector.mode,
-                isSystemDark = isDark,
+                isSystemDark = true,
                 homeBackground = HomeBackgroundManager.preset,
             )
         }
@@ -324,9 +319,6 @@ class BrowserViewModel @Inject constructor(
                 delay(2_000)
                 UsageStats.syncBlockedCounts()
                 syncStatsToState()
-                if (_state.value.showMediaPanel) {
-                    _state.update { it.copy(mediaItems = MediaSniffer.list()) }
-                }
             }
         }
     }
@@ -417,8 +409,7 @@ class BrowserViewModel @Inject constructor(
                     TabEntity(
                         id = id, url = normalized,
                         title = UrlUtils.displayHost(normalized),
-                        faviconUrl = null,
-                        lastActive = System.currentTimeMillis(),
+                        faviconUrl = null, lastActive = System.currentTimeMillis(),
                     )
                 )
                 _state.update {
@@ -456,8 +447,7 @@ class BrowserViewModel @Inject constructor(
                     TabEntity(
                         id = id, url = normalized,
                         title = UrlUtils.displayHost(normalized),
-                        faviconUrl = null,
-                        lastActive = System.currentTimeMillis(),
+                        faviconUrl = null, lastActive = System.currentTimeMillis(),
                     )
                 )
                 _state.update {
@@ -680,12 +670,12 @@ class BrowserViewModel @Inject constructor(
         if (!_state.value.isLoading) _state.update { it.copy(isLoading = true) }
     }
 
-    // FIXED: no `return` inside lambda — use if/else
+    // 300ms debounce on progress — kills the recomposition storm
     val onProgress: (Int) -> Unit = { p ->
         pendingProgress = p
         if (progressJob?.isActive != true) {
             progressJob = viewModelScope.launch {
-                delay(SpeedTuning.PROGRESS_UPDATE_MS)
+                delay(300)
                 val finalP = pendingProgress
                 val c = _state.value.progress
                 if (c / 10 != finalP / 10 || finalP == 100) {
@@ -783,9 +773,7 @@ class BrowserViewModel @Inject constructor(
     val openDownload: (Long) -> Unit = { id ->
         viewModelScope.launch {
             val dl = downloads.value.firstOrNull { it.id == id }
-            if (dl != null) {
-                DownloadManagerHelper.openFile(getApplication(), dl.fileName)
-            }
+            if (dl != null) DownloadManagerHelper.openFile(getApplication(), dl.fileName)
         }
     }
 
