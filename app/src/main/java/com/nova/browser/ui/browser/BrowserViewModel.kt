@@ -680,16 +680,17 @@ class BrowserViewModel @Inject constructor(
         if (!_state.value.isLoading) _state.update { it.copy(isLoading = true) }
     }
 
-    // ═══ DEBOUNCED PROGRESS — 250ms max ═══
+    // FIXED: no `return` inside lambda — use if/else
     val onProgress: (Int) -> Unit = { p ->
         pendingProgress = p
-        if (progressJob?.isActive == true) return@onProgress
-        progressJob = viewModelScope.launch {
-            delay(SpeedTuning.PROGRESS_UPDATE_MS)
-            val finalP = pendingProgress
-            val c = _state.value.progress
-            if (c / 10 != finalP / 10 || finalP == 100) {
-                _state.update { it.copy(progress = finalP) }
+        if (progressJob?.isActive != true) {
+            progressJob = viewModelScope.launch {
+                delay(SpeedTuning.PROGRESS_UPDATE_MS)
+                val finalP = pendingProgress
+                val c = _state.value.progress
+                if (c / 10 != finalP / 10 || finalP == 100) {
+                    _state.update { it.copy(progress = finalP) }
+                }
             }
         }
     }

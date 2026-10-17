@@ -31,7 +31,6 @@ import com.nova.browser.data.ImageQualityManager
 import com.nova.browser.data.MediaSniffer
 import com.nova.browser.data.NightModeInjector
 import com.nova.browser.data.SpeedDialManager
-import com.nova.browser.data.SpeedTuning
 import com.nova.browser.data.UserAgentManager
 import kotlin.math.abs
 
@@ -131,17 +130,11 @@ fun WebViewContainer(
                     loadsImagesAutomatically = ImageQualityManager.effectiveQuality() != ImageQualityManager.Quality.OFF
                     blockNetworkImage = ImageQualityManager.effectiveQuality() == ImageQualityManager.Quality.OFF
 
-                    // Viewport & rendering
                     useWideViewPort = true
                     loadWithOverviewMode = true
                     setSupportZoom(false)
                     builtInZoomControls = false
                     displayZoomControls = false
-
-                    // HTTP cache tuning
-                    setAppCacheEnabled(false)
-                    databaseEnabled = true
-                    domStorageEnabled = true
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         safeBrowsingEnabled = false
@@ -151,17 +144,6 @@ fun WebViewContainer(
                     }
 
                     mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-
-                    // ── NETWORK ─────────────────────────────
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                        // Preconnect hints for known CDNs
-                        // (WebView doesn't have a JS API for this — done via HTML hints)
-                    }
-
-                    // Accessibility / rendering
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                        offscreenPreRaster = false
-                    }
                 }
 
                 UserAgentManager.captureDefault(settings)
@@ -179,17 +161,14 @@ fun WebViewContainer(
                     ): WebResourceResponse? {
                         val uri = request?.url ?: return super.shouldInterceptRequest(view, request)
 
-                        // 1. Assets (Eruda)
                         val intercepted = assetLoader.shouldInterceptRequest(uri)
                         if (intercepted != null) return intercepted
 
-                        // 2. Ad blocker — fast cached decision
                         val url = uri.toString()
                         if (AdBlocker.shouldBlock(url)) {
                             return AdBlocker.blockedResponse()
                         }
 
-                        // 3. Media sniff — only GET requests
                         if (request.method == "GET") {
                             val ct = guessContentType(url)
                             if (ct != null) {
@@ -197,7 +176,6 @@ fun WebViewContainer(
                             }
                         }
 
-                        // 4. Image block on OFF quality
                         if (ImageQualityManager.shouldBlockImages()) {
                             val accept = request.requestHeaders["Accept"]
                             if (accept?.contains("image/") == true) {
@@ -217,7 +195,6 @@ fun WebViewContainer(
                                 MediaSniffer.setPageHost(uri.host ?: "")
                             } catch (_: Exception) { }
                         }
-                        // Lazy Eruda — only on sites that benefit
                         if (url != null && ErudaManager.shouldInject(url)) {
                             injectEruda(view)
                         }
